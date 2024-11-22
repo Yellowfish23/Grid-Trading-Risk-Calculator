@@ -48,23 +48,33 @@
                             </div>
                             <div class="mb-3">
                                 <label for="riskPercentage" class="form-label">Risk Percentage Per Trade (%)</label>
-                                <input type="number" class="form-control" id="riskPercentage" required min="0" max="100" step="0.01" value="1">
+                                <input type="number" class="form-control" id="riskPercentage" required min="0" max="100" step="0.01" value="5">
+                            </div>
+                            <div class="mb-3">
+                                <label for="martingaleFactor" class="form-label">Martingale Factor</label>
+                                <input type="number" class="form-control" id="martingaleFactor" required min="1" step="0.1" value="1.5">
+                                <small class="form-text text-muted">Position size multiplier for each grid level</small>
+                            </div>
+                            <div class="mb-3">
+                                <label for="gridLevels" class="form-label">Number of Grid Levels</label>
+                                <input type="number" class="form-control" id="gridLevels" required min="1" max="10" step="1" value="3">
                             </div>
                             <div class="mb-3">
                                 <label for="entryPrice" class="form-label">Entry Price (USD)</label>
                                 <input type="number" class="form-control" id="entryPrice" required min="0" step="0.00001" value="30000">
                             </div>
                             <div class="mb-3">
-                                <label for="stopLossPrice" class="form-label">Stop Loss Price (USD)</label>
-                                <input type="number" class="form-control" id="stopLossPrice" required min="0" step="0.00001" value="29700">
+                                <label for="takeProfitPercent" class="form-label">Take Profit Percentage (%)</label>
+                                <input type="number" class="form-control" id="takeProfitPercent" required min="0" step="0.1" value="15">
                             </div>
                             <div class="mb-3">
                                 <label for="takeProfitPrice" class="form-label">Take Profit Price (USD)</label>
-                                <input type="number" class="form-control" id="takeProfitPrice" required min="0" step="0.00001" value="31200">
+                                <input type="number" class="form-control" id="takeProfitPrice" readonly>
+                                <small class="form-text text-muted">Automatically calculated based on TP percentage</small>
                             </div>
                             <div class="mb-3">
                                 <label for="leverage" class="form-label">Leverage</label>
-                                <input type="number" class="form-control" id="leverage" required min="1" value="5">
+                                <input type="number" class="form-control" id="leverage" required min="1" value="10">
                             </div>
                             <div class="mb-3">
                                 <label for="entryFee" class="form-label">Entry Fee Rate (%)</label>
@@ -134,6 +144,31 @@
                                     </tr>
                                 </thead>
                                 <tbody id="whatIfTableBody">
+                                    <!-- Filled dynamically by JavaScript -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card mt-4">
+                    <div class="card-header">
+                        <h5>Grid Levels Analysis</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover" id="gridTable">
+                                <thead>
+                                    <tr>
+                                        <th>Level</th>
+                                        <th>Entry Price</th>
+                                        <th>Position Size</th>
+                                        <th>Required Margin</th>
+                                        <th>Take Profit</th>
+                                        <th>Potential Profit</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="gridTableBody">
                                     <!-- Filled dynamically by JavaScript -->
                                 </tbody>
                             </table>

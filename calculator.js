@@ -42,13 +42,14 @@ function calculateAll() {
 function getInputValues() {
     return {
         accountBalance: parseFloat(document.getElementById('accountBalance').value) || 0,
-        riskPercentage: parseFloat(document.getElementById('riskPercentage').value) || 0,
+        riskPercentage: parseFloat(document.getElementById('riskPercentage').value) || 5,
         entryPrice: parseFloat(document.getElementById('entryPrice').value) || 0,
-        stopLossPrice: parseFloat(document.getElementById('stopLossPrice').value) || 0,
-        takeProfitPrice: parseFloat(document.getElementById('takeProfitPrice').value) || 0,
-        leverage: parseFloat(document.getElementById('leverage').value) || 1,
-        entryFee: parseFloat(document.getElementById('entryFee').value) || 0,
-        exitFee: parseFloat(document.getElementById('exitFee').value) || 0
+        takeProfitPercent: parseFloat(document.getElementById('takeProfitPercent').value) || 15,
+        leverage: parseFloat(document.getElementById('leverage').value) || 10,
+        entryFee: parseFloat(document.getElementById('entryFee').value) || 0.05,
+        exitFee: parseFloat(document.getElementById('exitFee').value) || 0.05,
+        martingaleFactor: parseFloat(document.getElementById('martingaleFactor').value) || 1.5,
+        gridLevels: parseInt(document.getElementById('gridLevels').value) || 3
     };
 }
 
@@ -57,22 +58,24 @@ function validateInputs(values) {
         accountBalance,
         riskPercentage,
         entryPrice,
-        stopLossPrice,
-        takeProfitPrice,
+        takeProfitPercent,
         leverage,
         entryFee,
-        exitFee
+        exitFee,
+        martingaleFactor,
+        gridLevels
     } = values;
 
     return accountBalance > 0 &&
            riskPercentage > 0 &&
            riskPercentage <= 100 &&
            entryPrice > 0 &&
-           stopLossPrice > 0 &&
-           takeProfitPrice > 0 &&
+           takeProfitPercent > 0 &&
            leverage >= 1 &&
            entryFee >= 0 &&
-           exitFee >= 0;
+           exitFee >= 0 &&
+           martingaleFactor >= 1 &&
+           gridLevels >= 1;
 }
 
 function performCalculations(values) {
@@ -80,48 +83,101 @@ function performCalculations(values) {
         accountBalance,
         riskPercentage,
         entryPrice,
-        stopLossPrice,
-        takeProfitPrice,
+        takeProfitPercent,
         leverage,
         entryFee,
-        exitFee
+        exitFee,
+        martingaleFactor,
+        gridLevels
     } = values;
 
     // Calculate risk amount in USD
     const riskAmount = accountBalance * (riskPercentage / 100);
 
-    // Calculate position size
-    const stopLossDistance = Math.abs(entryPrice - stopLossPrice);
-    const positionSize = (riskAmount / stopLossDistance) * entryPrice;
+    // Calculate take profit price
+    const takeProfitPrice = entryPrice * (1 + takeProfitPercent / 100);
+    document.getElementById('takeProfitPrice').value = takeProfitPrice.toFixed(5);
 
-    // Calculate risk-reward ratio
-    const takeProfitDistance = Math.abs(takeProfitPrice - entryPrice);
-    const riskRewardRatio = (takeProfitDistance / stopLossDistance).toFixed(2);
+    // Calculate base position size
+    const positionSize = (riskAmount * leverage);
 
-    // Calculate adjusted position size with leverage
-    const adjustedPositionSize = positionSize * leverage;
+    // Calculate grid levels
+    const gridResults = calculateGridLevels(values, positionSize);
+    updateGridTable(gridResults);
 
-    // Calculate required margin
-    const requiredMargin = adjustedPositionSize / leverage;
-
-    // Calculate fees
-    const entryFeeAmount = (adjustedPositionSize * (entryFee / 100));
-    const exitFeeAmount = (adjustedPositionSize * (exitFee / 100));
+    // Calculate fees for base position
+    const entryFeeAmount = (positionSize * (entryFee / 100));
+    const exitFeeAmount = (positionSize * (exitFee / 100));
     const totalFees = entryFeeAmount + exitFeeAmount;
 
-    // Calculate potential profit/loss
-    const potentialProfit = (takeProfitDistance / entryPrice) * adjustedPositionSize - totalFees;
-    const potentialLoss = (stopLossDistance / entryPrice) * adjustedPositionSize + totalFees;
+    // Calculate potential profit/loss for base position
+    const profitDistance = takeProfitPrice - entryPrice;
+    const potentialProfit = (profitDistance / entryPrice) * positionSize - totalFees;
 
     return {
         positionSize: formatUSD(positionSize),
-        riskRewardRatio: `${riskRewardRatio}:1`,
-        adjustedPositionSize: formatUSD(adjustedPositionSize),
-        requiredMargin: formatUSD(requiredMargin),
+        riskRewardRatio: 'N/A (Grid Trading)',
+        adjustedPositionSize: formatUSD(positionSize * leverage),
+        requiredMargin: formatUSD(positionSize),
         totalFees: formatUSD(totalFees),
         potentialProfit: formatUSD(potentialProfit),
-        potentialLoss: formatUSD(potentialLoss)
+        potentialLoss: 'Variable (Grid Trading)'
     };
+}
+
+function calculateGridLevels(values, basePositionSize) {
+    const {
+        entryPrice,
+        takeProfitPercent,
+        martingaleFactor,
+        gridLevels,
+        leverage,
+        entryFee,
+        exitFee
+    } = values;
+
+    const gridResults = [];
+    const priceStep = (takeProfitPercent / 100) * entryPrice / gridLevels;
+
+    for (let i = 0; i < gridLevels; i++) {
+        const levelEntryPrice = entryPrice - (i * priceStep);
+        const levelPositionSize = basePositionSize * Math.pow(martingaleFactor, i);
+        const levelTakeProfit = levelEntryPrice * (1 + takeProfitPercent / 100);
+        const levelMargin = levelPositionSize / leverage;
+        
+        // Calculate fees and profit for this level
+        const levelFees = levelPositionSize * ((entryFee + exitFee) / 100);
+        const levelProfit = (levelTakeProfit - levelEntryPrice) / levelEntryPrice * levelPositionSize - levelFees;
+
+        gridResults.push({
+            level: i + 1,
+            entryPrice: levelEntryPrice,
+            positionSize: levelPositionSize,
+            margin: levelMargin,
+            takeProfit: levelTakeProfit,
+            potentialProfit: levelProfit
+        });
+    }
+
+    return gridResults;
+}
+
+function updateGridTable(gridResults) {
+    const tableBody = document.getElementById('gridTableBody');
+    tableBody.innerHTML = '';
+
+    gridResults.forEach(result => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${result.level}</td>
+            <td>${formatUSD(result.entryPrice)}</td>
+            <td>${formatUSD(result.positionSize)}</td>
+            <td>${formatUSD(result.margin)}</td>
+            <td>${formatUSD(result.takeProfit)}</td>
+            <td>${formatUSD(result.potentialProfit)}</td>
+        `;
+        tableBody.appendChild(row);
+    });
 }
 
 function updateResults(results) {
