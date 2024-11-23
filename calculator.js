@@ -14,13 +14,121 @@
  * @property {'long'|'short'} positionSide - Position direction
  */
 
+// API Configuration and Queue Management
+const API_CONFIG = {
+    COINBASE: {
+        baseUrl: 'https://api.coinbase.com/v2/prices',
+        rateLimit: 5000,
+        maxRetries: 3,
+        queue: []
+    },
+    COINLORE: {
+        baseUrl: 'https://api.coinlore.net/api/ticker',
+        rateLimit: 2000,
+        queue: []
+    }
+};
+
+// API Queue Manager
+const apiQueue = {
+    lastCall: {
+        coinbase: 0,
+        coinlore: 0
+    },
+    processing: {
+        coinbase: false,
+        coinlore: false
+    },
+
+    async addToQueue(api, request) {
+        const queue = API_CONFIG[api.toUpperCase()].queue;
+        return new Promise((resolve, reject) => {
+            queue.push({ request, resolve, reject });
+            this.processQueue(api);
+        });
+    },
+
+    async processQueue(api) {
+        const apiKey = api.toLowerCase();
+        if (this.processing[apiKey] || API_CONFIG[api.toUpperCase()].queue.length === 0) {
+            return;
+        }
+
+        this.processing[apiKey] = true;
+        const now = Date.now();
+        const lastCall = this.lastCall[apiKey];
+        const rateLimit = API_CONFIG[api.toUpperCase()].rateLimit;
+
+        if (now - lastCall < rateLimit) {
+            await new Promise(resolve => setTimeout(resolve, rateLimit - (now - lastCall)));
+        }
+
+        const { request, resolve, reject } = API_CONFIG[api.toUpperCase()].queue.shift();
+        
+        try {
+            const result = await request();
+            this.lastCall[apiKey] = Date.now();
+            resolve(result);
+        } catch (error) {
+            reject(error);
+        } finally {
+            this.processing[apiKey] = false;
+            if (API_CONFIG[api.toUpperCase()].queue.length > 0) {
+                this.processQueue(api);
+            }
+        }
+    }
+};
+
 // Initialize price history storage
 const priceHistory = {
-    last24h: [],
-    last48h: [],
-    last72h: [],
-    last96h: [],
-    last120h: []
+    data: new Map(),
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days in milliseconds
+    maxEntries: 1000,
+
+    add(symbol, price) {
+        if (!this.data.has(symbol)) {
+            this.data.set(symbol, []);
+        }
+        
+        const history = this.data.get(symbol);
+        history.push({
+            price,
+            timestamp: Date.now()
+        });
+
+        // Cleanup old entries
+        this.cleanup(symbol);
+    },
+
+    cleanup(symbol) {
+        const history = this.data.get(symbol);
+        if (!history) return;
+
+        const now = Date.now();
+        const validEntries = history.filter(entry => 
+            now - entry.timestamp < this.maxAge
+        );
+
+        // Keep only the latest entries if we exceed maxEntries
+        if (validEntries.length > this.maxEntries) {
+            validEntries.splice(0, validEntries.length - this.maxEntries);
+        }
+
+        this.data.set(symbol, validEntries);
+    },
+
+    getVolatility(symbol, timeframe) {
+        const history = this.data.get(symbol);
+        if (!history || history.length < 2) return 0;
+
+        const now = Date.now();
+        const relevantPrices = history
+            .filter(entry => now - entry.timestamp <= timeframe)
+            .map(entry => entry.price);
+
+        return calculateVolatility(relevantPrices);
+    }
 };
 
 // DOM Elements
@@ -99,7 +207,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initial price fetch
     fetchCurrentPrice().catch(error => {
         console.error('Initial price fetch failed:', error);
-        showError('Failed to fetch initial price');
+        errorHandler.show('Failed to fetch initial price');
     });
 });
 
@@ -111,7 +219,7 @@ function setupEventListeners() {
             await fetchCurrentPrice();
         } catch (error) {
             console.error('Price refresh failed:', error);
-            showError(error.message);
+            errorHandler.show('Failed to refresh price');
         } finally {
             elements.refreshPrice.disabled = false;
         }
@@ -159,58 +267,60 @@ async function fetchCurrentPrice() {
 
     const pair = elements.cryptoPair.value;
     if (!pair) {
-        updateApiStatus('No trading pair selected', 'error');
+        errorHandler.show('No trading pair selected', 'warning');
         return;
     }
 
     try {
         elements.currentPrice.classList.add('loading');
         elements.refreshPrice.disabled = true;
-        updateApiStatus('Fetching price...', 'warning');
+        errorHandler.show('Fetching price...', 'info');
         
         let price;
         // Try Coinbase first
         try {
             console.log('Attempting Coinbase API fetch for', pair);
             const now = Date.now();
-            if (now - apiState.lastCall.coinbase < API_CONFIG.COINBASE.rateLimit) {
+            if (now - apiQueue.lastCall.coinbase < API_CONFIG.COINBASE.rateLimit) {
                 throw new Error('Rate limit - switching to backup API');
             }
-            apiState.lastCall.coinbase = now;
+            apiQueue.lastCall.coinbase = now;
 
-            const response = await fetch(`${API_CONFIG.COINBASE.baseUrl}/${pair}/spot`);
-            console.log('Coinbase response status:', response.status);
-            
-            if (response.status === 429) {
-                apiState.status = 'rate_limited';
-                throw new Error('Rate limit exceeded - switching to backup API');
-            }
-            
-            if (!response.ok) {
-                throw new Error(`Coinbase API error: ${response.status} ${response.statusText}`);
-            }
-            
-            const data = await response.json();
-            console.log('Coinbase data received:', data);
-            
-            if (!data || !data.data || !data.data.amount) {
-                throw new Error('Invalid data structure from Coinbase');
-            }
-            
-            price = parseFloat(data.data.amount);
-            apiState.errors.coinbase = 0;
-            updateApiStatus('Using Coinbase API', 'success');
-            
+            const response = await apiQueue.addToQueue('coinbase', async () => {
+                const response = await fetch(`${API_CONFIG.COINBASE.baseUrl}/${pair}/spot`);
+                console.log('Coinbase response status:', response.status);
+                
+                if (response.status === 429) {
+                    errorHandler.show('Rate limit exceeded - switching to backup API', 'warning');
+                    throw new Error('Rate limit exceeded - switching to backup API');
+                }
+                
+                if (!response.ok) {
+                    throw new Error(`Coinbase API error: ${response.status} ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                console.log('Coinbase data received:', data);
+                
+                if (!data || !data.data || !data.data.amount) {
+                    throw new Error('Invalid data structure from Coinbase');
+                }
+                
+                price = parseFloat(data.data.amount);
+                errorHandler.show('Using Coinbase API', 'success');
+                
+            });
         } catch (coinbaseError) {
             console.warn('Coinbase API error:', coinbaseError);
-            apiState.errors.coinbase++;
-            
+            errorHandler.show('Coinbase API error - switching to backup API', 'warning');
             // Try Coinlore as backup
             try {
                 console.log('Attempting Coinlore API fetch for', pair);
-                price = await fetchCoinlorePrice(pair);
+                price = await apiQueue.addToQueue('coinlore', async () => {
+                    return await fetchCoinlorePrice(pair);
+                });
                 console.log('Coinlore price received:', price);
-                updateApiStatus('Using Coinlore API (backup)', 'warning');
+                errorHandler.show('Using Coinlore API (backup)', 'info');
             } catch (coinloreError) {
                 console.error('Backup API error:', coinloreError);
                 throw new Error('All APIs failed - please try again later');
@@ -228,24 +338,15 @@ async function fetchCurrentPrice() {
         elements.lastUpdate.textContent = new Date().toLocaleTimeString();
         
         // Store price history
-        const timestamp = Date.now();
-        const priceData = { price, timestamp };
-        
-        Object.keys(priceHistory).forEach(period => {
-            priceHistory[period].push(priceData);
-            if (priceHistory[period].length > 100) { // Keep last 100 points
-                priceHistory[period].shift();
-            }
-        });
+        priceHistory.add(pair, price);
         
         updateVolatilityDisplay();
         calculateAll();
         
     } catch (error) {
         console.error('Price fetch failed:', error);
-        updateApiStatus(error.message, 'error');
+        errorHandler.show('Failed to fetch price. Please try again.', 'error');
         elements.currentPrice.value = '0.00';
-        showError(error.message || 'Failed to fetch price. Please try again.');
         
     } finally {
         elements.currentPrice.classList.remove('loading');
@@ -278,85 +379,390 @@ function getInputValues() {
     };
 }
 
-function showError(message) {
-    if (!elements.errorContainer) {
-        console.error('Error container not found. Error message:', message);
+// Error handling system
+const errorHandler = {
+    container: null,
+    timeout: null,
+    errorCount: 0,
+    maxErrors: 3,
+    
+    initialize() {
+        this.container = document.getElementById('errorContainer');
+        if (!this.container) {
+            this.container = document.createElement('div');
+            this.container.id = 'errorContainer';
+            document.body.insertBefore(this.container, document.body.firstChild);
+        }
+    },
+
+    show(message, type = 'error', duration = 5000) {
+        if (!this.container) this.initialize();
+        
+        // Clear existing timeout
+        if (this.timeout) {
+            clearTimeout(this.timeout);
+            this.timeout = null;
+        }
+
+        // Create error element
+        const errorDiv = document.createElement('div');
+        errorDiv.className = `alert alert-${type} alert-dismissible fade show`;
+        errorDiv.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        `;
+
+        // Clear existing errors
+        this.container.innerHTML = '';
+        this.container.appendChild(errorDiv);
+
+        // Auto-dismiss after duration
+        this.timeout = setTimeout(() => {
+            errorDiv.remove();
+        }, duration);
+
+        // Track error count for API switching
+        if (type === 'error') {
+            this.errorCount++;
+            if (this.errorCount >= this.maxErrors) {
+                this.errorCount = 0;
+                // Switch to backup API
+                updateApiStatus('Switching to backup API', 'warning');
+            }
+        }
+    },
+
+    clear() {
+        if (this.container) {
+            this.container.innerHTML = '';
+        }
+        this.errorCount = 0;
+    }
+};
+
+// Unified grid table update function
+function updateGridTable(gridLevels) {
+    const table = document.getElementById('gridTable');
+    if (!table) return;
+
+    const tbody = table.querySelector('tbody');
+    tbody.innerHTML = '';
+
+    gridLevels.forEach((level, index) => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${index + 1}</td>
+            <td>${formatUSD(level.price)}</td>
+            <td>${formatUSD(level.positionSize)}</td>
+            <td>${level.profitPercent.toFixed(2)}%</td>
+            <td>${formatUSD(level.potentialProfit)}</td>
+            <td>${level.liquidationPrice ? formatUSD(level.liquidationPrice) : 'N/A'}</td>
+        `;
+        tbody.appendChild(row);
+
+        // Highlight current price level
+        const currentPrice = parseFloat(elements.currentPrice.value);
+        if (currentPrice >= level.price && currentPrice <= level.price * (1 + level.gridSpacing / 100)) {
+            row.classList.add('table-active');
+        }
+    });
+}
+
+// Unified pair selection function
+function selectPair(pair) {
+    if (!validatePair(pair)) {
+        errorHandler.show('Invalid trading pair format', 'warning');
         return;
     }
 
-    const alertDiv = document.createElement('div');
-    alertDiv.className = 'alert alert-danger alert-dismissible fade show';
-    alertDiv.role = 'alert';
-    alertDiv.innerHTML = `
-        ${message}
-        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-    `;
-    
-    elements.errorContainer.prepend(alertDiv);
-    
-    // Auto-remove after 5 seconds
-    setTimeout(() => {
-        alertDiv.classList.remove('show');
-        setTimeout(() => alertDiv.remove(), 150);
-    }, 5000);
+    elements.cryptoPair.value = pair;
+    updatePairHighlight(pair);
+    fetchCurrentPrice()
+        .then(() => {
+            calculateAll();
+            errorHandler.clear();
+        })
+        .catch(error => {
+            errorHandler.show(`Failed to fetch price for ${pair}: ${error.message}`, 'error');
+        });
 }
 
 function calculateAll() {
     const values = getInputValues();
-    if (!values) {
-        console.error('Failed to get input values');
+    if (!validateInputs(values)) return;
+
+    const results = performCalculations(values);
+    updateResults(results);
+}
+
+function validateInputs(values) {
+    const validations = [
+        { check: values.accountBalance > 0, message: 'Account balance must be positive' },
+        { check: values.riskPercentage > 0 && values.riskPercentage <= 100, message: 'Risk must be between 0-100%' },
+        { check: values.entryPrice > 0, message: 'Entry price must be positive' },
+        { check: values.takeProfitPercent > 0, message: 'Take profit must be positive' },
+        { check: values.leverage >= 1, message: 'Leverage must be at least 1x' },
+        { check: values.entryFee >= 0, message: 'Entry fee cannot be negative' },
+        { check: values.exitFee >= 0, message: 'Exit fee cannot be negative' },
+        { check: values.martingaleFactor >= 1, message: 'Martingale factor must be at least 1' },
+        { check: values.gridLevels >= 1, message: 'Must have at least 1 grid level' },
+        { check: values.maxDrawdown > 0, message: 'Max drawdown must be positive' },
+        { check: values.gridSpacing > 0, message: 'Grid spacing must be positive' }
+    ];
+
+    const failures = validations.filter(v => !v.check);
+    
+    if (failures.length > 0) {
+        errorHandler.show(failures.map(f => f.message).join(', '), 'error');
+        return false;
+    }
+
+    return true;
+}
+
+function performCalculations(values) {
+    const {
+        accountBalance,
+        riskPercentage,
+        entryPrice,
+        takeProfitPercent,
+        leverage,
+        entryFee,
+        exitFee,
+        martingaleFactor,
+        gridLevels,
+        maxDrawdown,
+        gridSpacing,
+        positionSide
+    } = values;
+
+    // Calculate optimal grid spacing
+    const dynamicGridSpacing = calculateGridSpacing(values);
+    const gridSpacingInput = document.getElementById('gridSpacing');
+    if (gridSpacingInput) {
+        gridSpacingInput.value = dynamicGridSpacing.toFixed(1);
+        // Trigger input event to ensure UI updates
+        gridSpacingInput.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    values.gridSpacing = dynamicGridSpacing;
+
+    // Calculate risk amount in USD
+    const riskAmount = accountBalance * (riskPercentage / 100);
+
+    // Calculate base position size
+    const positionSize = (riskAmount * leverage);
+
+    // Calculate grid levels
+    const gridResults = calculateGridLevels(values, positionSize);
+    updateGridTable(gridResults);
+
+    // Calculate fees for base position
+    const entryFeeAmount = (positionSize * (entryFee / 100));
+    const exitFeeAmount = (positionSize * (exitFee / 100));
+    const totalFees = entryFeeAmount + exitFeeAmount;
+
+    // Calculate potential profit/loss for base position
+    const profitDistance = positionSide === 'long'
+        ? takeProfitPercent
+        : -takeProfitPercent;
+    const potentialProfit = (profitDistance / 100) * positionSize - totalFees;
+
+    return {
+        positionSize: formatUSD(positionSize),
+        riskRewardRatio: 'N/A (Grid Trading)',
+        adjustedPositionSize: formatUSD(positionSize * leverage),
+        requiredMargin: formatUSD(positionSize),
+        totalFees: formatUSD(totalFees),
+        potentialProfit: formatUSD(potentialProfit),
+        potentialLoss: 'Variable (Grid Trading)'
+    };
+}
+
+function calculateGridSpacing(values) {
+    const {
+        takeProfitPercent,
+        gridLevels,
+        maxDrawdown,
+        leverage,
+        positionSide
+    } = values;
+
+    // Calculate total price range considering risk parameters
+    const riskAdjustedDrawdown = maxDrawdown / leverage;
+    const totalRange = takeProfitPercent + riskAdjustedDrawdown;
+    
+    // Distribute range across grid levels, ensuring minimum spacing
+    const spacing = Math.max(0.1, totalRange / (gridLevels + 1));
+    
+    return parseFloat(spacing.toFixed(1));
+}
+
+function calculateGridLevels(values, basePositionSize) {
+    const {
+        entryPrice,
+        takeProfitPercent,
+        martingaleFactor,
+        gridLevels,
+        leverage,
+        entryFee,
+        exitFee,
+        gridSpacing,
+        positionSide,
+        maxDrawdown
+    } = values;
+
+    const gridResults = [];
+    let totalPosition = 0;
+    let totalMargin = 0;
+    let totalRoi = 0;
+    let accumulatedFees = 0;
+
+    for (let i = 0; i < gridLevels; i++) {
+        const gridDropPercent = i * gridSpacing;
+        const levelEntryPrice = positionSide === 'long'
+            ? entryPrice * (1 - gridDropPercent / 100)
+            : entryPrice * (1 + gridDropPercent / 100);
+        
+        const levelPositionSize = basePositionSize * Math.pow(martingaleFactor, i);
+        const levelMargin = levelPositionSize / leverage;
+        
+        // Calculate fees for this level
+        const levelEntryFee = levelPositionSize * (entryFee / 100);
+        const levelExitFee = levelPositionSize * (exitFee / 100);
+        const levelTotalFees = levelEntryFee + levelExitFee;
+        accumulatedFees += levelTotalFees;
+        
+        const levelTakeProfit = positionSide === 'long'
+            ? levelEntryPrice * (1 + takeProfitPercent / 100)
+            : levelEntryPrice * (1 - takeProfitPercent / 100);
+
+        // More precise liquidation calculation for high leverage
+        const maintenanceMargin = 0.005; // 0.5% maintenance margin
+        const liquidationPrice = positionSide === 'long'
+            ? levelEntryPrice * (1 - (1 / leverage) + maintenanceMargin)
+            : levelEntryPrice * (1 + (1 / leverage) - maintenanceMargin);
+        
+        // Calculate ROI including grid impact
+        const gridImpact = gridDropPercent * (positionSide === 'long' ? -1 : 1);
+        const leveragedReturn = positionSide === 'long'
+            ? ((levelTakeProfit - levelEntryPrice) / levelEntryPrice * 100) + gridImpact
+            : ((levelEntryPrice - levelTakeProfit) / levelEntryPrice * 100) - gridImpact;
+            
+        const roi = (leveragedReturn * leverage) - ((entryFee + exitFee) * leverage);
+
+        totalPosition += levelPositionSize;
+        totalMargin += levelMargin;
+        totalRoi += roi;
+
+        gridResults.push({
+            level: i + 1,
+            entryPrice: levelEntryPrice,
+            positionSize: levelPositionSize,
+            margin: levelMargin,
+            takeProfit: levelTakeProfit,
+            roi: roi,
+            liquidation: liquidationPrice,
+            fees: levelTotalFees
+        });
+    }
+
+    // Update totals
+    document.getElementById('totalPosition').textContent = formatUSD(totalPosition);
+    document.getElementById('totalMargin').textContent = formatUSD(totalMargin);
+    document.getElementById('totalFees').textContent = formatUSD(accumulatedFees);
+    document.getElementById('avgRoi').textContent = (totalRoi / gridLevels).toFixed(2) + '%';
+
+    return gridResults;
+}
+
+function updateResults(results) {
+    if (!results) {
+        console.error('No results to display');
         return;
     }
 
     try {
-        const results = performCalculations(values);
-        updateResults(results);
+        // Update result values
+        document.getElementById('positionSize').textContent = results.positionSize;
+        document.getElementById('riskRewardRatio').textContent = results.riskRewardRatio;
+        document.getElementById('adjustedPositionSize').textContent = results.adjustedPositionSize;
+        document.getElementById('requiredMargin').textContent = results.requiredMargin;
+        document.getElementById('totalFees').textContent = results.totalFees;
+        document.getElementById('potentialProfit').textContent = results.potentialProfit;
+
     } catch (error) {
-        console.error('Calculation error:', error);
-        showError('Failed to perform calculations: ' + error.message);
+        console.error('Error updating results:', error);
+        errorHandler.show('Failed to update results display', 'error');
     }
 }
 
-/**
- * Updates the API status display
- * @param {string} message - Status message
- * @param {string} type - Status type ('success', 'warning', 'error')
- */
-function updateApiStatus(message, type = 'success') {
-    if (!elements.apiStatus) {
-        console.warn('API status element not found');
-        return;
+function updateVolatilityDisplay() {
+    const volatility = priceHistory.getVolatility(elements.cryptoPair.value, VOLATILITY_PERIODS['24h']);
+    const element = document.getElementById('volatility');
+    if (!element) return;
+    
+    element.textContent = volatility.toFixed(2) + '%';
+    element.className = '';
+    
+    if (volatility > 100) {
+        element.classList.add('text-danger');
+    } else if (volatility > 50) {
+        element.classList.add('text-warning');
+    } else {
+        element.classList.add('text-success');
     }
-
-    elements.apiStatus.textContent = message;
-    elements.apiStatus.classList.remove('api-status-success', 'api-status-warning', 'api-status-error');
-    elements.apiStatus.classList.add(`api-status-${type}`);
 }
 
-// Top 100 Cryptocurrency Pairs with symbols for autocomplete
-const TOP_PAIRS = [
-    // Major Pairs
-    'BTC-USD', 'ETH-USD', 'BNB-USD', 'XRP-USD', 'SOL-USD',
-    'ADA-USD', 'DOGE-USD', 'TRX-USD', 'DOT-USD', 'MATIC-USD',
-    'LTC-USD', 'SHIB-USD', 'AVAX-USD', 'UNI-USD', 'LINK-USD',
-    'ATOM-USD', 'XLM-USD', 'ETC-USD', 'FIL-USD', 'NEAR-USD',
-    'APE-USD', 'ALGO-USD', 'APT-USD', 'BCH-USD', 'MANA-USD',
-    'SAND-USD', 'AAVE-USD', 'AXS-USD', 'EGLD-USD', 'EOS-USD',
-    'FLOW-USD', 'FTM-USD', 'GALA-USD', 'GMT-USD', 'GRT-USD',
-    'HBAR-USD', 'ICP-USD', 'KLAY-USD', 'LDO-USD', 'MASK-USD',
-    'RNDR-USD', 'RUNE-USD', 'SNX-USD', 'STX-USD', 'THETA-USD',
-    'VET-USD', 'WAVES-USD', 'XTZ-USD', 'ZEC-USD', 'ZIL-USD',
-    // Additional Pairs
-    'INJ-USD', 'OP-USD', 'ARB-USD', 'SUI-USD', 'SEI-USD',
-    'BLUR-USD', 'IMX-USD', 'CFX-USD', 'ROSE-USD', 'ONE-USD',
-    'GALA-USD', 'CHZ-USD', 'HOT-USD', 'KAVA-USD', 'QTUM-USD',
-    'CRV-USD', 'BAT-USD', 'ENJ-USD', 'ZRX-USD', 'COMP-USD',
-    'DASH-USD', 'NEO-USD', 'IOTA-USD', 'XEM-USD', 'ONT-USD',
-    'DGB-USD', 'ICX-USD', 'SC-USD', 'ZEN-USD', 'FET-USD',
-    'STORJ-USD', 'ANKR-USD', 'RVN-USD', 'BAND-USD', 'IOST-USD',
-    'WOO-USD', 'PERP-USD', 'DYDX-USD', 'GMX-USD', 'JOE-USD',
-    'MAGIC-USD', 'AGIX-USD', 'FXS-USD', 'SSV-USD', 'RPL-USD',
-    'HFT-USD', 'HOOK-USD', 'APT-USD', 'OSMO-USD', 'KAS-USD'
+function formatUSD(value) {
+    if (typeof value !== 'number') {
+        return '$0.00';
+    }
+    return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD'
+    }).format(value);
+}
+
+function updateWhatIfAnalysis() {
+    const baseValues = getInputValues();
+    const scenarios = generateScenarios(baseValues);
+    const tableBody = document.getElementById('whatIfTableBody');
+    
+    // Clear existing rows
+    tableBody.innerHTML = '';
+    
+    // Add new rows for each scenario
+    scenarios.forEach(scenario => {
+        const results = performCalculations(scenario.values);
+        const row = document.createElement('tr');
+        
+        row.innerHTML = `
+            <td>${scenario.name}</td>
+            <td>${results.adjustedPositionSize}</td>
+            <td>${results.riskRewardRatio}</td>
+            <td>${results.potentialProfit}</td>
+            <td>${results.potentialLoss}</td>
+        `;
+        
+        tableBody.appendChild(row);
+    });
+}
+
+function generateScenarios(baseValues) {
+    return WHAT_IF_SCENARIOS.map(scenario => {
+        const values = { ...baseValues };
+        Object.assign(values, scenario);
+        return { name: scenario.label, values };
+    });
+}
+
+// What-if analysis scenarios
+const WHAT_IF_SCENARIOS = [
+    { label: 'Conservative', takeProfitPercent: 10, leverage: 3, gridLevels: 3 },
+    { label: 'Balanced', takeProfitPercent: 15, leverage: 5, gridLevels: 4 },
+    { label: 'Aggressive', takeProfitPercent: 20, leverage: 7, gridLevels: 5 },
+    { label: 'High Frequency', takeProfitPercent: 8, leverage: 4, gridLevels: 6 },
+    { label: 'Wide Range', takeProfitPercent: 25, leverage: 4, gridLevels: 3 }
 ];
 
 // Volatility periods in milliseconds
@@ -366,19 +772,6 @@ const VOLATILITY_PERIODS = {
     '72h': 72 * 60 * 60 * 1000,
     '96h': 96 * 60 * 60 * 1000,
     '120h': 120 * 60 * 60 * 1000
-};
-
-// API configuration
-const API_CONFIG = {
-    COINBASE: {
-        baseUrl: 'https://api.coinbase.com/v2/prices',
-        rateLimit: 5000, // 5 seconds between calls
-        maxRetries: 3
-    },
-    COINLORE: {
-        baseUrl: 'https://api.coinlore.net/api/ticker',
-        rateLimit: 2000 // 2 seconds between calls
-    }
 };
 
 // API state tracking
@@ -401,10 +794,10 @@ const apiState = {
  */
 async function fetchCoinlorePrice(symbol) {
     const now = Date.now();
-    if (now - apiState.lastCall.coinlore < API_CONFIG.COINLORE.rateLimit) {
+    if (now - apiQueue.lastCall.coinlore < API_CONFIG.COINLORE.rateLimit) {
         throw new Error('Coinlore rate limit - please wait');
     }
-    apiState.lastCall.coinlore = now;
+    apiQueue.lastCall.coinlore = now;
 
     // Convert pair format (e.g., 'BTC-USD' to 'BTC')
     const coin = symbol.split('-')[0].toLowerCase();
@@ -460,6 +853,32 @@ function initializePairsTable() {
         tbody.appendChild(tr);
     });
 }
+
+// Top 100 Cryptocurrency Pairs with symbols for autocomplete
+const TOP_PAIRS = [
+    // Major Pairs
+    'BTC-USD', 'ETH-USD', 'BNB-USD', 'XRP-USD', 'SOL-USD',
+    'ADA-USD', 'DOGE-USD', 'TRX-USD', 'DOT-USD', 'MATIC-USD',
+    'LTC-USD', 'SHIB-USD', 'AVAX-USD', 'UNI-USD', 'LINK-USD',
+    'ATOM-USD', 'XLM-USD', 'ETC-USD', 'FIL-USD', 'NEAR-USD',
+    'APE-USD', 'ALGO-USD', 'APT-USD', 'BCH-USD', 'MANA-USD',
+    'SAND-USD', 'AAVE-USD', 'AXS-USD', 'EGLD-USD', 'EOS-USD',
+    'FLOW-USD', 'FTM-USD', 'GALA-USD', 'GMT-USD', 'GRT-USD',
+    'HBAR-USD', 'ICP-USD', 'KLAY-USD', 'LDO-USD', 'MASK-USD',
+    'RNDR-USD', 'RUNE-USD', 'SNX-USD', 'STX-USD', 'THETA-USD',
+    'VET-USD', 'WAVES-USD', 'XTZ-USD', 'ZEC-USD', 'ZIL-USD',
+    // Additional Pairs
+    'INJ-USD', 'OP-USD', 'ARB-USD', 'SUI-USD', 'SEI-USD',
+    'BLUR-USD', 'IMX-USD', 'CFX-USD', 'ROSE-USD', 'ONE-USD',
+    'GALA-USD', 'CHZ-USD', 'HOT-USD', 'KAVA-USD', 'QTUM-USD',
+    'CRV-USD', 'BAT-USD', 'ENJ-USD', 'ZRX-USD', 'COMP-USD',
+    'DASH-USD', 'NEO-USD', 'IOTA-USD', 'XEM-USD', 'ONT-USD',
+    'DGB-USD', 'ICX-USD', 'SC-USD', 'ZEN-USD', 'FET-USD',
+    'STORJ-USD', 'ANKR-USD', 'RVN-USD', 'BAND-USD', 'IOST-USD',
+    'WOO-USD', 'PERP-USD', 'DYDX-USD', 'GMX-USD', 'JOE-USD',
+    'MAGIC-USD', 'AGIX-USD', 'FXS-USD', 'SSV-USD', 'RPL-USD',
+    'HFT-USD', 'HOOK-USD', 'APT-USD', 'OSMO-USD', 'KAS-USD'
+];
 
 // Initialize pair search and autocomplete
 function initializePairSearch() {
@@ -728,330 +1147,19 @@ function calculateLiquidationPrice(entryPrice, leverage, positionSide, maxDrawdo
 }
 
 /**
- * Calculates all trade parameters and updates the UI
+ * Updates the API status display
+ * @param {string} message - Status message
+ * @param {string} type - Status type ('success', 'warning', 'error')
  */
-function calculateAll() {
-    const values = getInputValues();
-    if (!validateInputs(values)) return;
-
-    const results = performCalculations(values);
-    updateResults(results);
-}
-
-/**
- * Validates input values and displays appropriate errors
- * @param {TradeParameters} values - Values to validate
- * @returns {boolean} Whether values are valid
- */
-function validateInputs(values) {
-    const validations = [
-        { check: values.accountBalance > 0, message: 'Account balance must be positive' },
-        { check: values.riskPercentage > 0 && values.riskPercentage <= 100, message: 'Risk must be between 0-100%' },
-        { check: values.entryPrice > 0, message: 'Entry price must be positive' },
-        { check: values.takeProfitPercent > 0, message: 'Take profit must be positive' },
-        { check: values.leverage >= 1, message: 'Leverage must be at least 1x' },
-        { check: values.entryFee >= 0, message: 'Entry fee cannot be negative' },
-        { check: values.exitFee >= 0, message: 'Exit fee cannot be negative' },
-        { check: values.martingaleFactor >= 1, message: 'Martingale factor must be at least 1' },
-        { check: values.gridLevels >= 1, message: 'Must have at least 1 grid level' },
-        { check: values.maxDrawdown > 0, message: 'Max drawdown must be positive' },
-        { check: values.gridSpacing > 0, message: 'Grid spacing must be positive' }
-    ];
-
-    const failures = validations.filter(v => !v.check);
-    
-    if (failures.length > 0) {
-        showError(failures.map(f => f.message).join(', '));
-        return false;
-    }
-
-    return true;
-}
-
-/**
- * Calculates optimal grid spacing based on trading parameters
- * @param {TradeParameters} values - Trading parameters
- * @returns {number} Optimal grid spacing percentage
- */
-function calculateGridSpacing(values) {
-    const {
-        takeProfitPercent,
-        gridLevels,
-        maxDrawdown,
-        leverage,
-        positionSide
-    } = values;
-
-    // Calculate total price range considering risk parameters
-    const riskAdjustedDrawdown = maxDrawdown / leverage;
-    const totalRange = takeProfitPercent + riskAdjustedDrawdown;
-    
-    // Distribute range across grid levels, ensuring minimum spacing
-    const spacing = Math.max(0.1, totalRange / (gridLevels + 1));
-    
-    return parseFloat(spacing.toFixed(1));
-}
-
-/**
- * Calculates all trade parameters and returns the results
- * @param {TradeParameters} values - Trading parameters
- * @returns {Object} Trade results
- */
-function performCalculations(values) {
-    const {
-        accountBalance,
-        riskPercentage,
-        entryPrice,
-        takeProfitPercent,
-        leverage,
-        entryFee,
-        exitFee,
-        martingaleFactor,
-        gridLevels,
-        maxDrawdown,
-        gridSpacing,
-        positionSide
-    } = values;
-
-    // Calculate optimal grid spacing
-    const dynamicGridSpacing = calculateGridSpacing(values);
-    const gridSpacingInput = document.getElementById('gridSpacing');
-    if (gridSpacingInput) {
-        gridSpacingInput.value = dynamicGridSpacing.toFixed(1);
-        // Trigger input event to ensure UI updates
-        gridSpacingInput.dispatchEvent(new Event('input', { bubbles: true }));
-    }
-    values.gridSpacing = dynamicGridSpacing;
-
-    // Calculate risk amount in USD
-    const riskAmount = accountBalance * (riskPercentage / 100);
-
-    // Calculate base position size
-    const positionSize = (riskAmount * leverage);
-
-    // Calculate grid levels
-    const gridResults = calculateGridLevels(values, positionSize);
-    updateGridTable(gridResults);
-
-    // Calculate fees for base position
-    const entryFeeAmount = (positionSize * (entryFee / 100));
-    const exitFeeAmount = (positionSize * (exitFee / 100));
-    const totalFees = entryFeeAmount + exitFeeAmount;
-
-    // Calculate potential profit/loss for base position
-    const profitDistance = positionSide === 'long'
-        ? takeProfitPercent
-        : -takeProfitPercent;
-    const potentialProfit = (profitDistance / 100) * positionSize - totalFees;
-
-    return {
-        positionSize: formatUSD(positionSize),
-        riskRewardRatio: 'N/A (Grid Trading)',
-        adjustedPositionSize: formatUSD(positionSize * leverage),
-        requiredMargin: formatUSD(positionSize),
-        totalFees: formatUSD(totalFees),
-        potentialProfit: formatUSD(potentialProfit),
-        potentialLoss: 'Variable (Grid Trading)'
-    };
-}
-
-/**
- * Calculates grid levels based on trading parameters
- * @param {TradeParameters} values - Trading parameters
- * @param {number} basePositionSize - Base position size
- * @returns {Array<Object>} Grid level results
- */
-function calculateGridLevels(values, basePositionSize) {
-    const {
-        entryPrice,
-        takeProfitPercent,
-        martingaleFactor,
-        gridLevels,
-        leverage,
-        entryFee,
-        exitFee,
-        gridSpacing,
-        positionSide,
-        maxDrawdown
-    } = values;
-
-    const gridResults = [];
-    let totalPosition = 0;
-    let totalMargin = 0;
-    let totalRoi = 0;
-    let accumulatedFees = 0;
-
-    for (let i = 0; i < gridLevels; i++) {
-        const gridDropPercent = i * gridSpacing;
-        const levelEntryPrice = positionSide === 'long'
-            ? entryPrice * (1 - gridDropPercent / 100)
-            : entryPrice * (1 + gridDropPercent / 100);
-        
-        const levelPositionSize = basePositionSize * Math.pow(martingaleFactor, i);
-        const levelMargin = levelPositionSize / leverage;
-        
-        // Calculate fees for this level
-        const levelEntryFee = levelPositionSize * (entryFee / 100);
-        const levelExitFee = levelPositionSize * (exitFee / 100);
-        const levelTotalFees = levelEntryFee + levelExitFee;
-        accumulatedFees += levelTotalFees;
-        
-        const levelTakeProfit = positionSide === 'long'
-            ? levelEntryPrice * (1 + takeProfitPercent / 100)
-            : levelEntryPrice * (1 - takeProfitPercent / 100);
-
-        // More precise liquidation calculation for high leverage
-        const maintenanceMargin = 0.005; // 0.5% maintenance margin
-        const liquidationPrice = positionSide === 'long'
-            ? levelEntryPrice * (1 - (1 / leverage) + maintenanceMargin)
-            : levelEntryPrice * (1 + (1 / leverage) - maintenanceMargin);
-        
-        // Calculate ROI including grid impact
-        const gridImpact = gridDropPercent * (positionSide === 'long' ? -1 : 1);
-        const leveragedReturn = positionSide === 'long'
-            ? ((levelTakeProfit - levelEntryPrice) / levelEntryPrice * 100) + gridImpact
-            : ((levelEntryPrice - levelTakeProfit) / levelEntryPrice * 100) - gridImpact;
-            
-        const roi = (leveragedReturn * leverage) - ((entryFee + exitFee) * leverage);
-
-        totalPosition += levelPositionSize;
-        totalMargin += levelMargin;
-        totalRoi += roi;
-
-        gridResults.push({
-            level: i + 1,
-            entryPrice: levelEntryPrice,
-            positionSize: levelPositionSize,
-            margin: levelMargin,
-            takeProfit: levelTakeProfit,
-            roi: roi,
-            liquidation: liquidationPrice,
-            fees: levelTotalFees
-        });
-    }
-
-    // Update totals
-    document.getElementById('totalPosition').textContent = formatUSD(totalPosition);
-    document.getElementById('totalMargin').textContent = formatUSD(totalMargin);
-    document.getElementById('totalFees').textContent = formatUSD(accumulatedFees);
-    document.getElementById('avgRoi').textContent = (totalRoi / gridLevels).toFixed(2) + '%';
-
-    return gridResults;
-}
-
-/**
- * Updates grid table with new results
- * @param {Array<Object>} gridResults - Grid level results
- */
-function updateGridTable(gridResults) {
-    const tableBody = document.getElementById('gridTableBody');
-    tableBody.innerHTML = '';
-
-    gridResults.forEach(result => {
-        const row = document.createElement('tr');
-        row.innerHTML = `
-            <td>${result.level}</td>
-            <td>${formatUSD(result.entryPrice)}</td>
-            <td>${formatUSD(result.positionSize)}</td>
-            <td>${formatUSD(result.margin)}</td>
-            <td>${formatUSD(result.takeProfit)}</td>
-            <td>${result.roi.toFixed(2)}%</td>
-            <td>${formatUSD(result.liquidation)}</td>
-        `;
-        
-        // Add warning class if close to liquidation
-        const currentPrice = parseFloat(document.getElementById('currentPrice').value) || result.entryPrice;
-        const liquidationDistance = Math.abs(currentPrice - result.liquidation) / currentPrice * 100;
-        if (liquidationDistance < 5) {
-            row.classList.add('table-danger');
-        }
-        
-        tableBody.appendChild(row);
-    });
-}
-
-/**
- * Updates results display with new values
- * @param {Object} results - Trade results
- */
-function updateResults(results) {
-    if (!results) {
-        console.error('No results to display');
+function updateApiStatus(message, type = 'success') {
+    if (!elements.apiStatus) {
+        console.warn('API status element not found');
         return;
     }
 
-    try {
-        // Update result values
-        document.getElementById('positionSize').textContent = results.positionSize;
-        document.getElementById('riskRewardRatio').textContent = results.riskRewardRatio;
-        document.getElementById('adjustedPositionSize').textContent = results.adjustedPositionSize;
-        document.getElementById('requiredMargin').textContent = results.requiredMargin;
-        document.getElementById('totalFees').textContent = results.totalFees;
-        document.getElementById('potentialProfit').textContent = results.potentialProfit;
-
-    } catch (error) {
-        console.error('Error updating results:', error);
-        showError('Failed to update results display');
-    }
-}
-
-/**
- * Updates the grid levels table with calculated grid data
- * @param {Array} gridLevels - Array of grid level data
- */
-function updateGridTable(gridLevels) {
-    if (!Array.isArray(gridLevels)) {
-        console.error('Invalid grid levels data');
-        return;
-    }
-
-    const tbody = document.querySelector('#gridTable tbody');
-    if (!tbody) {
-        console.error('Grid table body not found');
-        return;
-    }
-
-    try {
-        tbody.innerHTML = '';
-        
-        gridLevels.forEach((level, index) => {
-            const row = document.createElement('tr');
-            row.innerHTML = `
-                <td>${index + 1}</td>
-                <td>${formatUSD(level.price)}</td>
-                <td>${formatUSD(level.size)}</td>
-                <td>${level.profitLoss > 0 ? '+' : ''}${formatUSD(level.profitLoss)}</td>
-            `;
-            
-            // Add color coding for profit/loss
-            if (level.profitLoss > 0) {
-                row.classList.add('table-success');
-            } else if (level.profitLoss < 0) {
-                row.classList.add('table-danger');
-            }
-            
-            tbody.appendChild(row);
-        });
-
-    } catch (error) {
-        console.error('Error updating grid table:', error);
-        showError('Failed to update grid levels display');
-    }
-}
-
-/**
- * Formats a number as USD currency string
- * @param {number} value - Number to format
- * @returns {string} Formatted currency string
- */
-function formatUSD(value) {
-    if (typeof value !== 'number') {
-        return '$0.00';
-    }
-    return new Intl.NumberFormat('en-US', {
-        style: 'currency',
-        currency: 'USD'
-    }).format(value);
+    elements.apiStatus.textContent = message;
+    elements.apiStatus.classList.remove('api-status-success', 'api-status-warning', 'api-status-error');
+    elements.apiStatus.classList.add(`api-status-${type}`);
 }
 
 /**
