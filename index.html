@@ -5,17 +5,55 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Crypto Risk/Reward Calculator</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css">
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <div class="container-fluid">
+    <!-- Error Container -->
+    <div id="errorContainer"></div>
+
+    <div class="container mt-4">
         <div class="row">
-            <!-- Left Column - Pairs and Volatility -->
-            <div class="col-md-2">
-                <!-- Top Pairs Card -->
-                <div class="card">
-                    <div class="card-header py-1">
-                        <h6 class="mb-0">Top Pairs</h6>
+            <!-- Left Column - Pairs and Info -->
+            <div class="col-md-3">
+                <!-- Pair Search -->
+                <div class="card mb-3">
+                    <div class="card-header py-2">
+                        <h6 class="mb-0">Search Pair</h6>
+                    </div>
+                    <div class="card-body p-2">
+                        <div class="input-group">
+                            <input type="text" 
+                                   id="pairSearch" 
+                                   class="form-control form-control-sm" 
+                                   placeholder="Search or enter pair..."
+                                   autocomplete="off"
+                                   data-bs-toggle="tooltip" 
+                                   data-bs-placement="top" 
+                                   title="Type to search or enter a custom pair (e.g., BTC-USD)">
+                        </div>
+                        <div id="pairsDropdown" class="pairs-dropdown shadow-sm"></div>
+                    </div>
+                </div>
+
+                <!-- API Status -->
+                <div class="card mb-3">
+                    <div class="card-header py-2">
+                        <h6 class="mb-0">API Status</h6>
+                    </div>
+                    <div class="card-body p-2">
+                        <div id="apiStatus" class="api-status">
+                            <span class="status-dot"></span>
+                            <span class="status-text">Ready</span>
+                        </div>
+                        <small class="text-muted">Last Update: <span id="lastUpdate">Never</span></small>
+                    </div>
+                </div>
+
+                <!-- Popular Pairs -->
+                <div class="card mb-3">
+                    <div class="card-header py-2">
+                        <h6 class="mb-0">Popular Pairs</h6>
                     </div>
                     <div class="card-body p-0">
                         <div class="table-responsive">
@@ -29,241 +67,278 @@
                 </div>
                 
                 <!-- Volatility Card -->
-                <div class="card mt-2">
-                    <div class="card-header py-1">
+                <div class="card mb-3">
+                    <div class="card-header py-2">
                         <h6 class="mb-0">Volatility Index</h6>
                     </div>
                     <div class="card-body p-2">
                         <div class="volatility-item">
                             <label>24h Vol:</label>
-                            <span id="vol24h" class="float-end">-</span>
+                            <span id="vol24h">-</span>
                         </div>
                         <div class="volatility-item">
-                            <label>24-48h Vol:</label>
-                            <span id="vol48h" class="float-end">-</span>
+                            <label>48h Vol:</label>
+                            <span id="vol48h">-</span>
                         </div>
                         <div class="volatility-item">
-                            <label>48-72h Vol:</label>
-                            <span id="vol72h" class="float-end">-</span>
+                            <label>72h Vol:</label>
+                            <span id="vol72h">-</span>
+                        </div>
+                        <div class="volatility-item">
+                            <label>96h Vol:</label>
+                            <span id="vol96h">-</span>
+                        </div>
+                        <div class="volatility-item">
+                            <label>120h Vol:</label>
+                            <span id="vol120h">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- What-If Analysis -->
+                <div class="card">
+                    <div class="card-header py-2">
+                        <h6 class="mb-0">What-If Analysis</h6>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover mb-0" id="whatIfTable">
+                                <tbody class="small">
+                                    <!-- What-if scenarios populated by JavaScript -->
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Right Column - Calculator -->
-            <div class="col-md-10">
-                <div class="row">
-                    <!-- Trade Parameters -->
-                    <div class="col-md-5">
-                        <div class="card">
-                            <div class="card-header">
-                                <h5 class="mb-0">Trade Parameters</h5>
+            <!-- Right Column - Trading Parameters and Results -->
+            <div class="col-md-9">
+                <!-- Trading Parameters Section -->
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <h5 class="mb-0">Trading Parameters</h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="calculatorForm">
+                            <!-- Current Price and Position Side -->
+                            <div class="row g-2">
+                                <!-- Current Price -->
+                                <div class="col-md-6">
+                                    <label for="currentPrice" class="form-label">
+                                        Current Price (USD)
+                                        <i class="bi bi-info-circle" 
+                                           data-bs-toggle="tooltip" 
+                                           data-bs-placement="top" 
+                                           title="Current market price. Click refresh to fetch latest, or enter manually."></i>
+                                    </label>
+                                    <div class="input-group">
+                                        <input type="number" 
+                                               class="form-control" 
+                                               id="currentPrice" 
+                                               placeholder="Enter price" 
+                                               step="0.01" 
+                                               min="0" 
+                                               required>
+                                        <button class="btn btn-outline-secondary" 
+                                                type="button" 
+                                                id="refreshPrice">
+                                            <i class="bi bi-arrow-clockwise"></i>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Position Side -->
+                                <div class="col-md-6">
+                                    <label for="positionSide" class="form-label">
+                                        Position Side
+                                        <i class="bi bi-info-circle" 
+                                           data-bs-toggle="tooltip" 
+                                           data-bs-placement="top" 
+                                           title="Long: profit when price goes up. Short: profit when price goes down."></i>
+                                    </label>
+                                    <select class="form-select" id="positionSide" required>
+                                        <option value="long">Long</option>
+                                        <option value="short">Short</option>
+                                    </select>
+                                </div>
                             </div>
-                            <div class="card-body">
-                                <form id="calculatorForm">
-                                    <div class="row g-2">
-                                        <div class="col-md-6">
-                                            <label for="cryptoPair" class="form-label">Cryptocurrency Pair</label>
-                                            <select class="form-control" id="cryptoPair">
-                                                <option value="BTC-USD">BTC/USD (Bitcoin)</option>
-                                                <option value="ETH-USD">ETH/USD (Ethereum)</option>
-                                                <option value="SOL-USD">SOL/USD (Solana)</option>
-                                                <option value="XRP-USD">XRP/USD (Ripple)</option>
-                                                <option value="DOGE-USD">DOGE/USD (Dogecoin)</option>
-                                            </select>
-                                        </div>
-                                        <div class="col-md-6">
-                                            <label for="currentPrice" class="form-label">Current Price</label>
-                                            <div class="input-group input-group-sm">
-                                                <input type="number" class="form-control form-control-sm" id="currentPrice" readonly>
-                                                <button class="btn btn-outline-secondary btn-sm" type="button" id="refreshPrice">↻</button>
-                                                <span class="input-group-text px-1 py-0">
-                                                    <small class="text-muted" style="font-size: 0.7rem;">Last: <span id="lastUpdate">-</span></small>
-                                                </span>
-                                            </div>
-                                        </div>
-                                    </div>
 
-                                    <div class="row g-2">
-                                        <div class="col-md-6">
-                                            <label for="positionSide" class="form-label">Position Side</label>
-                                            <select class="form-control" id="positionSide">
-                                                <option value="long">Long</option>
-                                                <option value="short">Short</option>
-                                            </select>
-                                        </div>
-                                        <div class="col-md-6">
-                                            <label for="leverage" class="form-label">Leverage</label>
-                                            <input type="number" class="form-control" id="leverage" required min="1" value="10">
-                                        </div>
-                                    </div>
+                            <div class="row g-2">
+                                <div class="col-md-6">
+                                    <label for="leverage" class="form-label" data-bs-toggle="tooltip" data-bs-placement="top" title="Position leverage. Higher leverage means higher risk and potential returns.">
+                                        Leverage
+                                    </label>
+                                    <input type="number" class="form-control" id="leverage" required min="1" value="10">
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="riskPercentage" class="form-label" data-bs-toggle="tooltip" data-bs-placement="top" title="Percentage of account balance to risk on this trade">
+                                        Risk Per Trade (%)
+                                    </label>
+                                    <input type="number" class="form-control" id="riskPercentage" required min="0" max="100" step="0.1" value="5">
+                                </div>
+                            </div>
 
-                                    <div class="row g-2">
-                                        <div class="col-md-3">
-                                            <label for="riskPercentage" class="form-label">Risk Per Trade (%)</label>
-                                            <input type="number" class="form-control" id="riskPercentage" required min="0" max="100" step="0.1" value="5">
-                                        </div>
-                                        <div class="col-md-3">
-                                            <label for="riskAmount" class="form-label">Risk Amount ($)</label>
-                                            <input type="number" class="form-control" id="riskAmount" required min="0" step="0.01" value="50">
-                                        </div>
-                                        <div class="col-md-3">
-                                            <label for="gridLevels" class="form-label">Grid Levels</label>
-                                            <input type="number" class="form-control" id="gridLevels" required min="1" max="10" step="1" value="5">
-                                        </div>
-                                        <div class="col-md-3">
-                                            <label for="gridSpacing" class="form-label">Grid Spacing (%)</label>
-                                            <input type="number" class="form-control" id="gridSpacing" readonly>
-                                        </div>
-                                    </div>
+                            <div class="row g-2">
+                                <div class="col-md-3">
+                                    <label for="riskAmount" class="form-label" data-bs-toggle="tooltip" data-bs-placement="top" title="Dollar amount at risk based on account balance and risk percentage">
+                                        Risk Amount ($)
+                                    </label>
+                                    <input type="number" class="form-control" id="riskAmount" required min="0" step="0.01" value="50">
+                                </div>
+                                <div class="col-md-3">
+                                    <label for="gridLevels" class="form-label" data-bs-toggle="tooltip" data-bs-placement="top" title="Number of grid levels to distribute your position">
+                                        Grid Levels
+                                    </label>
+                                    <input type="number" class="form-control" id="gridLevels" required min="1" max="10" step="1" value="5">
+                                </div>
+                                <div class="col-md-3">
+                                    <label for="gridSpacing" class="form-label" data-bs-toggle="tooltip" data-bs-placement="top" title="Automatically calculated spacing between grid levels based on take profit and risk parameters">
+                                        Grid Spacing (%)
+                                    </label>
+                                    <input type="number" class="form-control" id="gridSpacing" readonly>
+                                </div>
+                                <div class="col-md-3">
+                                    <label for="takeProfitPercent" class="form-label" data-bs-toggle="tooltip" data-bs-placement="top" title="Target profit percentage for the entire grid">
+                                        Take Profit (%)
+                                    </label>
+                                    <input type="number" class="form-control" id="takeProfitPercent" required min="0" step="0.1" value="15">
+                                </div>
+                            </div>
 
-                                    <div class="row g-2">
-                                        <div class="col-md-3">
-                                            <label for="takeProfitPercent" class="form-label">Take Profit (%)</label>
-                                            <input type="number" class="form-control" id="takeProfitPercent" required min="0" step="0.1" value="15">
-                                        </div>
-                                        <div class="col-md-3">
-                                            <label for="takeProfitPrice" class="form-label">TP Price (USD)</label>
-                                            <input type="number" class="form-control" id="takeProfitPrice" readonly>
-                                        </div>
-                                        <div class="col-md-3">
-                                            <label for="martingaleFactor" class="form-label">Martingale Factor</label>
-                                            <input type="number" class="form-control" id="martingaleFactor" required min="1" step="0.1" value="1.5">
-                                        </div>
-                                        <div class="col-md-3">
-                                            <label for="maxDrawdown" class="form-label">Max Drawdown (%)</label>
-                                            <input type="number" class="form-control" id="maxDrawdown" required min="0" step="0.1" value="20">
-                                        </div>
-                                    </div>
+                            <div class="row g-2">
+                                <div class="col-md-3">
+                                    <label for="takeProfitPrice" class="form-label" data-bs-toggle="tooltip" data-bs-placement="top" title="Calculated take profit price based on entry price and take profit percentage">
+                                        TP Price (USD)
+                                    </label>
+                                    <input type="number" class="form-control" id="takeProfitPrice" readonly>
+                                </div>
+                                <div class="col-md-3">
+                                    <label for="martingaleFactor" class="form-label" data-bs-toggle="tooltip" data-bs-placement="top" title="Multiplier for position size at each grid level. Higher values mean larger positions at further levels.">
+                                        Martingale Factor
+                                    </label>
+                                    <input type="number" class="form-control" id="martingaleFactor" required min="1" step="0.1" value="1.5">
+                                </div>
+                                <div class="col-md-3">
+                                    <label for="maxDrawdown" class="form-label" data-bs-toggle="tooltip" data-bs-placement="top" title="Maximum allowable drawdown before considering position liquidation">
+                                        Max Drawdown (%)
+                                    </label>
+                                    <input type="number" class="form-control" id="maxDrawdown" required min="0" step="0.1" value="20">
+                                </div>
+                                <div class="col-md-3">
+                                    <label for="entryFee" class="form-label" data-bs-toggle="tooltip" data-bs-placement="top" title="Fee charged when entering a position">
+                                        Entry Fee (%)
+                                    </label>
+                                    <input type="number" class="form-control" id="entryFee" required min="0" step="0.001" value="0.05">
+                                </div>
+                            </div>
 
-                                    <div class="row g-2">
-                                        <div class="col-md-3">
-                                            <label for="entryFee" class="form-label">Entry Fee (%)</label>
-                                            <input type="number" class="form-control" id="entryFee" required min="0" step="0.001" value="0.05">
-                                        </div>
-                                        <div class="col-md-3">
-                                            <label for="exitFee" class="form-label">Exit Fee (%)</label>
-                                            <input type="number" class="form-control" id="exitFee" required min="0" step="0.001" value="0.05">
-                                        </div>
-                                        <div class="col-md-6">
-                                            <label for="accountBalance" class="form-label">Account Balance (USD)</label>
-                                            <input type="number" class="form-control" id="accountBalance" required min="0" step="0.01" value="1000">
-                                        </div>
-                                    </div>
+                            <div class="row g-2">
+                                <div class="col-md-3">
+                                    <label for="exitFee" class="form-label" data-bs-toggle="tooltip" data-bs-placement="top" title="Fee charged when exiting a position">
+                                        Exit Fee (%)
+                                    </label>
+                                    <input type="number" class="form-control" id="exitFee" required min="0" step="0.001" value="0.05">
+                                </div>
+                                <div class="col-md-3">
+                                    <label for="accountBalance" class="form-label" data-bs-toggle="tooltip" data-bs-placement="top" title="Your current account balance">
+                                        Account Balance (USD)
+                                    </label>
+                                    <input type="number" class="form-control" id="accountBalance" required min="0" step="0.01" value="1000">
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="lastUpdate" class="form-label" data-bs-toggle="tooltip" data-bs-placement="top" title="Last update time for current price">
+                                        Last Update
+                                    </label>
+                                    <input type="text" class="form-control" id="lastUpdate" readonly>
+                                </div>
+                            </div>
 
-                                    <div class="d-grid gap-2">
-                                        <button type="button" class="btn btn-secondary" id="resetDefaults">Reset to Defaults</button>
-                                    </div>
-                                </form>
+                            <div class="mb-3">
+                                <label for="cryptoPair" class="form-label">Trading Pair</label>
+                                <div class="input-group">
+                                    <input type="text" class="form-control" id="cryptoPair" value="BTC-USD">
+                                    <button class="btn btn-outline-secondary" type="button" id="refreshPrice">
+                                        <i class="fas fa-sync-alt"></i> Refresh
+                                    </button>
+                                </div>
+                                <div id="apiStatus" class="api-status mt-1">Ready</div>
+                            </div>
+
+                            <div class="d-grid gap-2">
+                                <button type="button" class="btn btn-secondary" id="resetDefaults">Reset to Defaults</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Results Section -->
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">Trading Results</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Position Size</label>
+                                    <div id="positionSize" class="form-control-plaintext">$0.00</div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Required Margin</label>
+                                    <div id="requiredMargin" class="form-control-plaintext">$0.00</div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Total Fees</label>
+                                    <div id="totalFees" class="form-control-plaintext">$0.00</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Potential Profit</label>
+                                    <div id="potentialProfit" class="form-control-plaintext">$0.00</div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Risk/Reward Ratio</label>
+                                    <div id="riskRewardRatio" class="form-control-plaintext">N/A</div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Adjusted Position Size</label>
+                                    <div id="adjustedPositionSize" class="form-control-plaintext">$0.00</div>
+                                </div>
                             </div>
                         </div>
                     </div>
+                </div>
 
-                    <!-- Calculation Results -->
-                    <div class="col-md-7">
-                        <!-- Results Card -->
-                        <div class="card">
-                            <div class="card-header">
-                                <h5>Calculation Results</h5>
-                            </div>
-                            <div class="card-body">
-                                <div class="result-item">
-                                    <label>Position Size:</label>
-                                    <span id="positionSize">-</span>
-                                </div>
-                                <div class="result-item">
-                                    <label>Risk-Reward Ratio:</label>
-                                    <span id="riskRewardRatio">-</span>
-                                </div>
-                                <div class="result-item">
-                                    <label>Adjusted Position Size:</label>
-                                    <span id="adjustedPositionSize">-</span>
-                                </div>
-                                <div class="result-item">
-                                    <label>Required Margin:</label>
-                                    <span id="requiredMargin">-</span>
-                                </div>
-                                <div class="result-item">
-                                    <label>Total Fees:</label>
-                                    <span id="totalFees">-</span>
-                                </div>
-                                <div class="result-item">
-                                    <label>Potential Profit:</label>
-                                    <span id="potentialProfit">-</span>
-                                </div>
-                                <div class="result-item">
-                                    <label>Potential Loss:</label>
-                                    <span id="potentialLoss">-</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- What-If Analysis Section -->
-                        <div class="card mt-4">
-                            <div class="card-header">
-                                <h5>What-If Analysis</h5>
-                            </div>
-                            <div class="card-body">
-                                <div class="table-responsive">
-                                    <table class="table table-sm table-hover" id="whatIfTable">
-                                        <thead>
-                                            <tr>
-                                                <th>Scenario</th>
-                                                <th>Position Size</th>
-                                                <th>R:R Ratio</th>
-                                                <th>Potential Profit</th>
-                                                <th>Potential Loss</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody id="whatIfTableBody">
-                                            <!-- Filled dynamically by JavaScript -->
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="card mt-4">
-                            <div class="card-header">
-                                <h5>Grid Levels</h5>
-                            </div>
-                            <div class="card-body p-2">
-                                <div class="table-responsive">
-                                    <table class="table table-sm table-hover mb-0" id="gridTable">
-                                        <thead>
-                                            <tr>
-                                                <th>Level</th>
-                                                <th>Price</th>
-                                                <th>Size (USD)</th>
-                                                <th>Position Size</th>
-                                                <th>Required Margin</th>
-                                                <th>Liquidation</th>
-                                                <th>ROI %</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                        </tbody>
-                                        <tfoot>
-                                            <tr class="table-secondary">
-                                                <td><strong>Total</strong></td>
-                                                <td>-</td>
-                                                <td id="totalSize">-</td>
-                                                <td id="totalPosition">-</td>
-                                                <td id="totalMargin">-</td>
-                                                <td id="avgLiquidation">-</td>
-                                                <td id="avgRoi">-</td>
-                                            </tr>
-                                        </tfoot>
-                                    </table>
-                                </div>
-                            </div>
+                <!-- Grid Levels Table -->
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">Grid Levels</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover" id="gridTable">
+                                <thead>
+                                    <tr>
+                                        <th>Level</th>
+                                        <th>Price</th>
+                                        <th>Size</th>
+                                        <th>P/L</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <!-- Grid levels will be populated dynamically -->
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
+    </div>
 
-        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-        <script src="calculator.js"></script>
-    </body>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="calculator.js"></script>
+</body>
 </html>
