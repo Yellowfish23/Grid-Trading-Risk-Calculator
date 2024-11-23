@@ -1,6 +1,7 @@
 document.addEventListener('DOMContentLoaded', function() {
-    // Get all input elements
-    const inputs = document.querySelectorAll('input');
+    // Get all input elements and select elements
+    const inputs = document.querySelectorAll('input, select');
+    const resetButton = document.getElementById('resetDefaults');
     const cryptoPairSelect = document.getElementById('cryptoPair');
     const refreshPriceButton = document.getElementById('refreshPrice');
     
@@ -12,8 +13,12 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
+    // Add event listener for reset button
+    resetButton.addEventListener('click', resetToDefaults);
+
     // Add event listener for cryptocurrency pair selection
     cryptoPairSelect.addEventListener('change', () => {
+        updatePairHighlight(cryptoPairSelect.value);
         fetchCurrentPrice();
     });
 
@@ -22,14 +27,74 @@ document.addEventListener('DOMContentLoaded', function() {
         fetchCurrentPrice();
     });
 
-    // Initial calculations and price fetch
+    // Initialize pairs table
+    initializePairsTable();
+
+    // Initial calculations
     calculateAll();
     updateWhatIfAnalysis();
-    fetchCurrentPrice();
-
-    // Set up automatic price refresh every 30 seconds
-    setInterval(fetchCurrentPrice, 30000);
 });
+
+const DEFAULT_VALUES = {
+    accountBalance: 10000,
+    riskPercentage: 5,
+    gridLevels: 3,
+    leverage: 5,
+    entryFee: 0.05,
+    exitFee: 0.05,
+    takeProfitPercent: 15,
+    maxDrawdown: 20,
+    martingaleFactor: 1.5,
+    positionSide: 'long'
+};
+
+// Top 50 Cryptocurrency Pairs
+const TOP_PAIRS = [
+    'BTC-USD', 'ETH-USD', 'BNB-USD', 'XRP-USD', 'SOL-USD',
+    'ADA-USD', 'DOGE-USD', 'TRX-USD', 'DOT-USD', 'MATIC-USD',
+    'LTC-USD', 'SHIB-USD', 'AVAX-USD', 'UNI-USD', 'LINK-USD',
+    'ATOM-USD', 'XLM-USD', 'ETC-USD', 'FIL-USD', 'NEAR-USD',
+    'APE-USD', 'ALGO-USD', 'APT-USD', 'BCH-USD', 'MANA-USD',
+    'SAND-USD', 'AAVE-USD', 'AXS-USD', 'EGLD-USD', 'EOS-USD',
+    'FLOW-USD', 'FTM-USD', 'GALA-USD', 'GMT-USD', 'GRT-USD',
+    'HBAR-USD', 'ICP-USD', 'KLAY-USD', 'LDO-USD', 'MASK-USD',
+    'RNDR-USD', 'RUNE-USD', 'SNX-USD', 'STX-USD', 'THETA-USD',
+    'VET-USD', 'WAVES-USD', 'XTZ-USD', 'ZEC-USD', 'ZIL-USD'
+];
+
+function resetToDefaults() {
+    Object.entries(DEFAULT_VALUES).forEach(([id, value]) => {
+        const element = document.getElementById(id);
+        if (element) {
+            element.value = value;
+        }
+    });
+    calculateAll();
+    updateWhatIfAnalysis();
+}
+
+function getInputValues() {
+    return {
+        accountBalance: parseFloat(document.getElementById('accountBalance').value) || DEFAULT_VALUES.accountBalance,
+        riskPercentage: parseFloat(document.getElementById('riskPercentage').value) || DEFAULT_VALUES.riskPercentage,
+        entryPrice: parseFloat(document.getElementById('entryPrice').value) || 0,
+        takeProfitPercent: parseFloat(document.getElementById('takeProfitPercent').value) || DEFAULT_VALUES.takeProfitPercent,
+        leverage: parseFloat(document.getElementById('leverage').value) || DEFAULT_VALUES.leverage,
+        entryFee: parseFloat(document.getElementById('entryFee').value) || DEFAULT_VALUES.entryFee,
+        exitFee: parseFloat(document.getElementById('exitFee').value) || DEFAULT_VALUES.exitFee,
+        martingaleFactor: parseFloat(document.getElementById('martingaleFactor').value) || DEFAULT_VALUES.martingaleFactor,
+        gridLevels: parseInt(document.getElementById('gridLevels').value) || DEFAULT_VALUES.gridLevels,
+        maxDrawdown: parseFloat(document.getElementById('maxDrawdown').value) || DEFAULT_VALUES.maxDrawdown,
+        positionSide: document.getElementById('positionSide').value
+    };
+}
+
+function calculateLiquidationPrice(entryPrice, leverage, positionSide, maxDrawdown) {
+    const liquidationPercent = 100 / leverage * maxDrawdown / 100;
+    return positionSide === 'long' 
+        ? entryPrice * (1 - liquidationPercent)
+        : entryPrice * (1 + liquidationPercent);
+}
 
 function calculateAll() {
     const values = getInputValues();
@@ -37,20 +102,6 @@ function calculateAll() {
 
     const results = performCalculations(values);
     updateResults(results);
-}
-
-function getInputValues() {
-    return {
-        accountBalance: parseFloat(document.getElementById('accountBalance').value) || 0,
-        riskPercentage: parseFloat(document.getElementById('riskPercentage').value) || 5,
-        entryPrice: parseFloat(document.getElementById('entryPrice').value) || 0,
-        takeProfitPercent: parseFloat(document.getElementById('takeProfitPercent').value) || 15,
-        leverage: parseFloat(document.getElementById('leverage').value) || 10,
-        entryFee: parseFloat(document.getElementById('entryFee').value) || 0.05,
-        exitFee: parseFloat(document.getElementById('exitFee').value) || 0.05,
-        martingaleFactor: parseFloat(document.getElementById('martingaleFactor').value) || 1.5,
-        gridLevels: parseInt(document.getElementById('gridLevels').value) || 3
-    };
 }
 
 function validateInputs(values) {
@@ -63,7 +114,8 @@ function validateInputs(values) {
         entryFee,
         exitFee,
         martingaleFactor,
-        gridLevels
+        gridLevels,
+        maxDrawdown
     } = values;
 
     return accountBalance > 0 &&
@@ -75,7 +127,8 @@ function validateInputs(values) {
            entryFee >= 0 &&
            exitFee >= 0 &&
            martingaleFactor >= 1 &&
-           gridLevels >= 1;
+           gridLevels >= 1 &&
+           maxDrawdown > 0;
 }
 
 function performCalculations(values) {
@@ -88,15 +141,18 @@ function performCalculations(values) {
         entryFee,
         exitFee,
         martingaleFactor,
-        gridLevels
+        gridLevels,
+        maxDrawdown,
+        positionSide
     } = values;
+
+    // Calculate optimal grid spacing
+    const dynamicGridSpacing = calculateGridSpacing(values);
+    document.getElementById('gridSpacing').value = dynamicGridSpacing.toFixed(1);
+    values.gridSpacing = dynamicGridSpacing;
 
     // Calculate risk amount in USD
     const riskAmount = accountBalance * (riskPercentage / 100);
-
-    // Calculate take profit price
-    const takeProfitPrice = entryPrice * (1 + takeProfitPercent / 100);
-    document.getElementById('takeProfitPrice').value = takeProfitPrice.toFixed(5);
 
     // Calculate base position size
     const positionSize = (riskAmount * leverage);
@@ -111,8 +167,10 @@ function performCalculations(values) {
     const totalFees = entryFeeAmount + exitFeeAmount;
 
     // Calculate potential profit/loss for base position
-    const profitDistance = takeProfitPrice - entryPrice;
-    const potentialProfit = (profitDistance / entryPrice) * positionSize - totalFees;
+    const profitDistance = positionSide === 'long'
+        ? takeProfitPercent
+        : -takeProfitPercent;
+    const potentialProfit = (profitDistance / 100) * positionSize - totalFees;
 
     return {
         positionSize: formatUSD(positionSize),
@@ -125,6 +183,27 @@ function performCalculations(values) {
     };
 }
 
+function calculateGridSpacing(values) {
+    const {
+        takeProfitPercent,
+        gridLevels,
+        maxDrawdown,
+        leverage,
+        positionSide
+    } = values;
+
+    // Calculate optimal grid spacing based on take profit and max drawdown
+    const totalRange = positionSide === 'long' 
+        ? takeProfitPercent + (maxDrawdown * 100 / leverage)
+        : takeProfitPercent + (maxDrawdown * 100 / leverage);
+    
+    // Distribute the range across grid levels
+    const optimalSpacing = totalRange / (gridLevels + 1);
+    
+    // Ensure minimum spacing of 0.1%
+    return Math.max(0.1, optimalSpacing);
+}
+
 function calculateGridLevels(values, basePositionSize) {
     const {
         entryPrice,
@@ -133,21 +212,46 @@ function calculateGridLevels(values, basePositionSize) {
         gridLevels,
         leverage,
         entryFee,
-        exitFee
+        exitFee,
+        gridSpacing,
+        positionSide,
+        maxDrawdown
     } = values;
 
     const gridResults = [];
-    const priceStep = (takeProfitPercent / 100) * entryPrice / gridLevels;
+    let totalPosition = 0;
+    let totalMargin = 0;
+    let totalRoi = 0;
 
     for (let i = 0; i < gridLevels; i++) {
-        const levelEntryPrice = entryPrice - (i * priceStep);
+        const gridDropPercent = i * gridSpacing;
+        const levelEntryPrice = positionSide === 'long'
+            ? entryPrice * (1 - gridDropPercent / 100)
+            : entryPrice * (1 + gridDropPercent / 100);
+        
         const levelPositionSize = basePositionSize * Math.pow(martingaleFactor, i);
-        const levelTakeProfit = levelEntryPrice * (1 + takeProfitPercent / 100);
         const levelMargin = levelPositionSize / leverage;
         
-        // Calculate fees and profit for this level
-        const levelFees = levelPositionSize * ((entryFee + exitFee) / 100);
-        const levelProfit = (levelTakeProfit - levelEntryPrice) / levelEntryPrice * levelPositionSize - levelFees;
+        const levelTakeProfit = positionSide === 'long'
+            ? levelEntryPrice * (1 + takeProfitPercent / 100)
+            : levelEntryPrice * (1 - takeProfitPercent / 100);
+
+        const levelLiquidation = calculateLiquidationPrice(
+            levelEntryPrice,
+            leverage,
+            positionSide,
+            maxDrawdown
+        );
+        
+        // Calculate ROI
+        const leveragedReturn = positionSide === 'long'
+            ? (levelTakeProfit - levelEntryPrice) / levelEntryPrice * 100
+            : (levelEntryPrice - levelTakeProfit) / levelEntryPrice * 100;
+        const roi = (leveragedReturn * leverage) - ((entryFee + exitFee) * leverage);
+
+        totalPosition += levelPositionSize;
+        totalMargin += levelMargin;
+        totalRoi += roi;
 
         gridResults.push({
             level: i + 1,
@@ -155,9 +259,15 @@ function calculateGridLevels(values, basePositionSize) {
             positionSize: levelPositionSize,
             margin: levelMargin,
             takeProfit: levelTakeProfit,
-            potentialProfit: levelProfit
+            roi: roi,
+            liquidation: levelLiquidation
         });
     }
+
+    // Update totals in the table footer
+    document.getElementById('totalPosition').textContent = formatUSD(totalPosition);
+    document.getElementById('totalMargin').textContent = formatUSD(totalMargin);
+    document.getElementById('averageRoi').textContent = (totalRoi / gridLevels).toFixed(2) + '%';
 
     return gridResults;
 }
@@ -174,8 +284,17 @@ function updateGridTable(gridResults) {
             <td>${formatUSD(result.positionSize)}</td>
             <td>${formatUSD(result.margin)}</td>
             <td>${formatUSD(result.takeProfit)}</td>
-            <td>${formatUSD(result.potentialProfit)}</td>
+            <td>${result.roi.toFixed(2)}%</td>
+            <td>${formatUSD(result.liquidation)}</td>
         `;
+        
+        // Add warning class if close to liquidation
+        const currentPrice = parseFloat(document.getElementById('currentPrice').value) || result.entryPrice;
+        const liquidationDistance = Math.abs(currentPrice - result.liquidation) / currentPrice * 100;
+        if (liquidationDistance < 5) {
+            row.classList.add('table-danger');
+        }
+        
         tableBody.appendChild(row);
     });
 }
@@ -247,28 +366,95 @@ function generateScenarios(baseValues) {
     ];
 }
 
-async function fetchCurrentPrice() {
-    const cryptoPair = document.getElementById('cryptoPair').value;
-    const currentPriceInput = document.getElementById('currentPrice');
-    const lastUpdateSpan = document.getElementById('lastUpdate');
-    const entryPriceInput = document.getElementById('entryPrice');
+// Volatility tracking
+let priceHistory = {
+    last24h: [],
+    last48h: [],
+    last72h: []
+};
 
+async function fetchHistoricalPrices() {
+    const pair = document.getElementById('cryptoPair').value;
+    const now = new Date();
+    const threeDaysAgo = new Date(now - 72 * 60 * 60 * 1000);
+    
     try {
-        const response = await fetch(`https://api.coinbase.com/v2/prices/${cryptoPair}/spot`);
+        const response = await fetch(`https://api.pro.coinbase.com/products/${pair}/candles?start=${threeDaysAgo.toISOString()}&end=${now.toISOString()}&granularity=3600`);
         const data = await response.json();
-        const price = parseFloat(data.data.amount);
+        
+        // Sort data by timestamp (newest first)
+        data.sort((a, b) => b[0] - a[0]);
+        
+        // Split into 24h chunks
+        priceHistory.last24h = data.slice(0, 24);
+        priceHistory.last48h = data.slice(24, 48);
+        priceHistory.last72h = data.slice(48, 72);
+        
+        updateVolatilityDisplay();
+    } catch (error) {
+        console.error('Error fetching historical prices:', error);
+    }
+}
 
-        // Update current price display
-        currentPriceInput.value = price;
-        entryPriceInput.value = price;
-        lastUpdateSpan.textContent = new Date().toLocaleTimeString();
+function calculateVolatility(priceData) {
+    if (!priceData || priceData.length < 2) return 0;
+    
+    // Calculate price changes as percentages
+    const returns = [];
+    for (let i = 1; i < priceData.length; i++) {
+        const currentPrice = priceData[i][4]; // Close price
+        const previousPrice = priceData[i-1][4];
+        returns.push((currentPrice - previousPrice) / previousPrice * 100);
+    }
+    
+    // Calculate standard deviation of returns
+    const mean = returns.reduce((a, b) => a + b, 0) / returns.length;
+    const variance = returns.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / returns.length;
+    const volatility = Math.sqrt(variance);
+    
+    return volatility;
+}
 
-        // Recalculate values
+function updateVolatilityDisplay() {
+    const vol24h = calculateVolatility(priceHistory.last24h);
+    const vol48h = calculateVolatility(priceHistory.last48h);
+    const vol72h = calculateVolatility(priceHistory.last72h);
+    
+    document.getElementById('vol24h').textContent = vol24h.toFixed(2) + '%';
+    document.getElementById('vol48h').textContent = vol48h.toFixed(2) + '%';
+    document.getElementById('vol72h').textContent = vol72h.toFixed(2) + '%';
+    
+    // Add color coding based on volatility changes
+    const vol24hElement = document.getElementById('vol24h');
+    const vol48hElement = document.getElementById('vol48h');
+    const vol72hElement = document.getElementById('vol72h');
+    
+    vol24hElement.className = 'float-end ' + getVolatilityClass(vol24h, vol48h);
+    vol48hElement.className = 'float-end ' + getVolatilityClass(vol48h, vol72h);
+    vol72hElement.className = 'float-end';
+}
+
+function getVolatilityClass(current, previous) {
+    if (current > previous * 1.1) return 'text-danger';
+    if (current < previous * 0.9) return 'text-success';
+    return '';
+}
+
+async function fetchCurrentPrice() {
+    const pair = document.getElementById('cryptoPair').value;
+    try {
+        const response = await fetch(`https://api.pro.coinbase.com/products/${pair}/ticker`);
+        const data = await response.json();
+        
+        document.getElementById('currentPrice').value = parseFloat(data.price).toFixed(2);
+        document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
+        
+        // Fetch historical prices for volatility
+        await fetchHistoricalPrices();
+        
         calculateAll();
-        updateWhatIfAnalysis();
     } catch (error) {
         console.error('Error fetching price:', error);
-        lastUpdateSpan.textContent = 'Error fetching price';
     }
 }
 
@@ -279,4 +465,36 @@ function formatUSD(value) {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2
     }).format(value);
+}
+
+function initializePairsTable() {
+    const pairsTableBody = document.querySelector('#pairsTable tbody');
+    const currentPair = document.getElementById('cryptoPair').value;
+    
+    pairsTableBody.innerHTML = TOP_PAIRS.map(pair => `
+        <tr class="${pair === currentPair ? 'table-info fw-bold' : ''}" data-pair="${pair}">
+            <td class="py-1">${pair}</td>
+        </tr>
+    `).join('');
+
+    // Add click handlers
+    pairsTableBody.querySelectorAll('tr').forEach(row => {
+        row.addEventListener('click', () => {
+            const pair = row.dataset.pair;
+            document.getElementById('cryptoPair').value = pair;
+            updatePairHighlight(pair);
+            calculateAll(); // Recalculate with new pair
+        });
+    });
+}
+
+function updatePairHighlight(selectedPair) {
+    const rows = document.querySelectorAll('#pairsTable tr');
+    rows.forEach(row => {
+        if (row.dataset.pair === selectedPair) {
+            row.classList.add('table-info', 'fw-bold');
+        } else {
+            row.classList.remove('table-info', 'fw-bold');
+        }
+    });
 }
