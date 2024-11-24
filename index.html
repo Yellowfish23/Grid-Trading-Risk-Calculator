@@ -3,6 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        .readonly-field {
+            background-color: #f8f9fa !important;
+        }
+    </style>
     <title>Grid Trading Risk Calculator</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="styles.css" rel="stylesheet">
@@ -139,11 +144,11 @@
                                 <div class="row g-2">
                                     <div class="col">
                                         <label class="form-label form-label-sm">Trading Pair</label>
-                                        <input type="text" class="form-control form-control-sm" id="tradingPair" readonly>
+                                        <input type="text" class="form-control form-control-sm readonly-field" id="tradingPair" readonly>
                                     </div>
                                     <div class="col">
                                         <label class="form-label form-label-sm">Entry Price</label>
-                                        <input type="number" class="form-control form-control-sm" id="entryPrice" step="0.00000001" min="0">
+                                        <input type="number" class="form-control form-control-sm readonly-field" id="entryPrice" step="0.00000001" min="0">
                                     </div>
                                     <div class="col">
                                         <label class="form-label form-label-sm">Initial Capital (USDT)</label>
@@ -161,7 +166,7 @@
                                 <div class="row g-2 mt-2">
                                     <div class="col-md-3">
                                         <label class="form-label form-label-sm">Initial Trade Value</label>
-                                        <input type="number" class="form-control form-control-sm" id="initialTradeValue" readonly>
+                                        <input type="number" class="form-control form-control-sm" id="initialTradeValue" step="0.1" min="0" max="100000">
                                     </div>
                                     <div class="col-md-3">
                                         <label class="form-label form-label-sm">TP %</label>
@@ -172,11 +177,11 @@
                                     </div>
                                     <div class="col-md-3">
                                         <label class="form-label form-label-sm">TP Value ($)</label>
-                                        <input type="number" class="form-control form-control-sm" id="tpValue" readonly>
+                                        <input type="number" class="form-control form-control-sm" id="tpValue" step="0.1" min="0" max="100000">
                                     </div>
                                     <div class="col-md-3">
                                         <label class="form-label form-label-sm">$ Price move to TP</label>
-                                        <input type="number" class="form-control form-control-sm" id="priceMoveToTP" readonly>
+                                        <input type="number" class="form-control form-control-sm readonly-field" id="priceMoveToTP" readonly>
                                     </div>
                                 </div>
 
@@ -212,15 +217,15 @@
                                     </div>
                                     <div class="col-md-3">
                                         <label class="form-label form-label-sm">Take Profit Price</label>
-                                        <input type="number" class="form-control form-control-sm" id="tpPrice" readonly>
+                                        <input type="number" class="form-control form-control-sm readonly-field" id="tpPrice" readonly>
                                     </div>
                                     <div class="col-md-3">
                                         <label class="form-label form-label-sm">Average Entry</label>
-                                        <input type="number" class="form-control form-control-sm" id="averageEntry" readonly>
+                                        <input type="number" class="form-control form-control-sm readonly-field" id="averageEntry" readonly>
                                     </div>
                                     <div class="col-md-3">
                                         <label class="form-label form-label-sm">Margin Required</label>
-                                        <input type="number" class="form-control form-control-sm" id="marginRequired" readonly>
+                                        <input type="number" class="form-control form-control-sm readonly-field" id="marginRequired" readonly>
                                     </div>
                                 </div>
 
