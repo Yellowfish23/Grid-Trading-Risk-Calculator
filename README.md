@@ -1,29 +1,49 @@
-# Crypto Risk/Reward Calculator
+# Grid Trading Risk Calculator
 
-A real-time cryptocurrency trading calculator that helps traders manage risk and calculate potential returns for perpetual futures trading.
+A powerful web-based calculator for cryptocurrency grid trading strategies on perpetual futures markets.
 
 ## Features
 
-- Real-time cryptocurrency prices from Coinbase API
-- Risk/Reward calculation
-- Position size calculation
-- Leverage adjustment
-- Fee calculation
-- What-If analysis for different scenarios
-- Automatic price updates
-- Support for multiple cryptocurrency pairs
+- Real-time market data from Binance and CoinGecko APIs
+- Comprehensive grid trading calculations
+- Dynamic take-profit and risk analysis
+- Customizable grid levels and multipliers
+- Detailed position sizing and margin requirements
+- Live market updates with configurable refresh intervals
 
-## How to Use
+## Default Configuration
 
-1. Select your cryptocurrency pair
-2. View real-time market price
-3. Enter your account balance and risk parameters
-4. See calculated position size and potential outcomes
-5. Explore different scenarios in the What-If analysis table
+- Initial Trade Size: 10%
+- Leverage: 3x
+- Grid Levels: 3
+- Grid Size: 2%
+- Grid Size Multiplier: 0.9
+- Trade Size Multiplier: 1.15
+- Take Profit: 10%
 
-## Technologies Used
+## Usage
 
-- HTML5
-- CSS3 with Bootstrap 5
-- JavaScript
-- Coinbase Public API
+1. Select a trading pair from the top pairs list
+2. Adjust your trading parameters:
+   - Initial capital
+   - Trade size percentage
+   - Leverage
+   - Grid settings
+   - Take profit target
+3. View calculated grid levels and risk metrics
+4. Monitor potential profit and required margin for each level
+
+## Installation
+
+1. Clone the repository
+2. Open `index.html` in your web browser
+3. Start calculating your grid trading strategies!
+
+## Dependencies
+
+- Bootstrap 5.3.0 (included via CDN)
+- Modern web browser with JavaScript enabled
+
+## License
+
+MIT License - feel free to use and modify as needed.

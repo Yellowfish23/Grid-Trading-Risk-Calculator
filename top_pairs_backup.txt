@@ -1,0 +1,53 @@
+# Top 50 Cryptocurrency Trading Pairs (USDT)
+# Last Updated: 2024
+
+BTCUSDT     # Bitcoin
+ETHUSDT     # Ethereum
+BNBUSDT     # Binance Coin
+XRPUSDT     # Ripple
+ADAUSDT     # Cardano
+DOGEUSDT    # Dogecoin
+MATICUSDT   # Polygon
+SOLUSDT     # Solana
+DOTUSDT     # Polkadot
+LTCUSDT     # Litecoin
+AVAXUSDT    # Avalanche
+ATOMUSDT    # Cosmos
+LINKUSDT    # Chainlink
+UNIUSDT     # Uniswap
+ETCUSDT     # Ethereum Classic
+XLMUSDT     # Stellar
+NEARUSDT    # NEAR Protocol
+ALGOUSDT    # Algorand
+ICPUSDT     # Internet Computer
+VETUSDT     # VeChain
+FILUSDT     # Filecoin
+AAVEUSDT    # Aave
+XMRUSDT     # Monero
+AXSUSDT     # Axie Infinity
+EGLDUSDT    # Elrond
+SANDUSDT    # The Sandbox
+MANAUSDT    # Decentraland
+CRVUSDT     # Curve DAO
+APTUSDT     # Aptos
+LDOUSDT     # Lido DAO
+RUNEUSDT    # THORChain
+MKRUSDT     # Maker
+FTMUSDT     # Fantom
+HBARUSDT    # Hedera
+XTZUSDT     # Tezos
+THETAUSDT   # Theta Network
+ENJUSDT     # Enjin Coin
+KLAYUSDT    # Klaytn
+FLOWUSDT    # Flow
+GMTUSDT     # STEPN
+CHZUSDT     # Chiliz
+BATUSDT     # Basic Attention Token
+ZECUSDT     # Zcash
+QNTUSDT     # Quant
+WAVESUSDT   # Waves
+ZILUSDT     # Zilliqa
+SNXUSDT     # Synthetix
+DASHUSDT    # Dash
+NEXOUSDT    # Nexo
+RVNUSDT     # Ravencoin

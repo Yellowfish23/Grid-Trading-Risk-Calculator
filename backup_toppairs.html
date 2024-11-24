@@ -1,0 +1,43 @@
+<!-- Pairs List Column Backup -->
+<div class="col-md-5">
+    <div class="card mb-4" style="position: sticky; top: 10px; max-height: calc(100vh - 20px); display: flex; flex-direction: column;">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <div>
+                <span class="h5 mb-0">Top Pairs</span>
+                <select id="pairCount" class="form-select-sm ms-2 d-inline-block" style="width: auto;">
+                    <option value="10">10 Pairs</option>
+                    <option value="20" selected>20 Pairs</option>
+                    <option value="50">50 Pairs</option>
+                </select>
+            </div>
+            <div>
+                <button id="updateButton" class="btn btn-sm btn-primary">Update</button>
+                <div class="form-check form-switch d-inline-block ms-2">
+                    <input class="form-check-input" type="checkbox" id="autoUpdate">
+                    <label class="form-check-label" for="autoUpdate">Auto</label>
+                </div>
+            </div>
+        </div>
+        <div class="card-body d-flex flex-column" style="overflow: hidden;">
+            <div id="status" class="alert alert-info mb-3">Loading pairs data...</div>
+            <div class="table-responsive" style="flex: 1; overflow-y: auto;">
+                <table class="table table-hover table-sm mb-0">
+                    <thead style="position: sticky; top: 0; background-color: white; z-index: 1;">
+                        <tr>
+                            <th>Pair</th>
+                            <th>Price</th>
+                            <th>24h%</th>
+                            <th>D1R%</th>
+                            <th>D2R%</th>
+                            <th>D3R%</th>
+                            <th>D4R%</th>
+                            <th>D5R%</th>
+                            <th>MC(B)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="pairsTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
