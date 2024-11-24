@@ -514,7 +514,7 @@ class GridTradingCalculator {
         }
 
         if (this.gridLevelsInput && !this.gridLevelsInput.value) {
-            this.gridLevelsInput.value = '3';
+            this.gridLevelsInput.value = '5';
         }
 
         if (this.gridSizeInput && !this.gridSizeInput.value) {
@@ -555,7 +555,7 @@ class GridTradingCalculator {
         }
 
         if (this.gridLevelsInput && !this.gridLevelsInput.value) {
-            this.gridLevelsInput.value = '3';
+            this.gridLevelsInput.value = '5';
         }
 
         if (this.gridSizeInput && !this.gridSizeInput.value) {
