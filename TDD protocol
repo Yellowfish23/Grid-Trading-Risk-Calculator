@@ -1,0 +1,65 @@
+Perform a detailed end-to-end audit of the project and generate an actionable improvement plan.
+
+- Start by carefully analyzing the entire project and documenting an overview.
+- Identify areas that need enhancement, without making unnecessary changes. Remain focused on improvements critical to achieving a Minimum Viable Product (MVP).
+- Develop a step-by-step plan for resolving each identified issue.
+- Implement changes iteratively, ensuring that each step is completed fully before moving on to the next. Stay methodical and do not get distracted by tangential tasks.
+- After completing initial changes, verify that all steps have been completed per your plan. 
+- Conduct a second analysis, without making any new changes, to evaluate the impact of prior modifications.
+- Confirm that the project improvements are satisfactory before proceeding to the next phase.
+
+# Steps
+
+1. **Initial Audit Report**: 
+   - Analyze the project end-to-end. Write a comprehensive report that includes an overview of current architecture, strengths, weaknesses, and issues.
+   
+2. **Identify Issues for Improvement**: 
+   - Identify specific issues and describe suggested improvements. Avoid changing elements that do not contribute to achieving MVP.
+   
+3. **Improvement Plan**: 
+   - For each identified issue, outline step-by-step how to solve it. The plan should be actionable and thorough.
+   
+4. **Implementation of Improvements**: 
+   - Carefully make changes step by step. Stay focused and avoid deviating from planned tasks. Ensure each change is fully completed before progressing to the next.
+   
+5. **Verification**: 
+   - Review your completed work to check adherence to the plan. Ensure no unexpected changes occurred.
+   
+6. **Re-Evaluate the Project**: 
+   - Repeat the audit to confirm that the intended issues have been resolved, and no new issues have emerged due to changes.
+
+7. **Proceed Only If Approved**: 
+   - Move to the next stage only if all planned changes and improvements meet MVP standards.
+
+# Output Format
+
+- Provide an overview audit report as a well-structured narrative or list.
+- Identify each key area for improvement, detailing the problem and recommended solution.
+- Present a step-by-step actionable plan for changes.
+- Include a review report summarizing changes made, whether the plan was strictly followed, and re-evaluate findings.
+
+# Examples
+
+### Example 1:
+
+#### **Audit Report**
+- **Current Overview**: The project currently has suboptimal performance due to inefficient backend database queries. User interface has usability issues, particularly in the navigation flow. 
+- **Strengths**: Scalable architecture, clean codebase.
+- **Weaknesses**: Inefficient backend queries, unclear navigation.
+
+#### **Identified Issues for Improvement**
+- **Performance Issue**: Backend database queries have low efficiency.
+  - **Improvement Suggestion**: Optimize the database schema and introduce indexes.
+- **Usability Issue**: Users are finding the navigation confusing.
+  - **Improvement Suggestion**: Simplify navigation structure and conduct a UX test.
+
+#### **Step-by-Step Improvement Plan**
+1. Optimize database schema to remove unnecessary tables, ensuring normalization.
+2. Add appropriate indexing to frequently queried columns.
+3. Streamline the navigation flow by limiting the number of main categories to four core sections.
+
+#### **Verification and Evaluation**
+- Confirm database changes improved performance metrics (e.g., average query speed improved by 30%).
+- Conduct user interviews to determine if navigation is now clearer after changes.
+
+**Note**: This example is shorter than an actual report. Describe each identified issue and solution in more detail, with specific project-related metrics if available.

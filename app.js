@@ -14,6 +14,7 @@ class GridTradingCalculator {
         
         // Default trading pair
         this.defaultPair = 'BTCUSDT';
+        this.selectedPairPrice = null;  // Store the selected pair's price format
         this.pairs = [];
         this.marketCaps = {};
         this.lastUpdate = null;
@@ -40,6 +41,7 @@ class GridTradingCalculator {
         this.tradeSizeMultiplierInput = null;
         this.tpPriceInput = null;
         this.averageEntryInput = null;
+        this.marginRequiredInput = null; // Renamed from requiredMarginInput
     }
 
     initializeElements() {
@@ -57,7 +59,7 @@ class GridTradingCalculator {
         this.tradeSizePercentInput = document.getElementById('tradeSizePercent');
         this.leverageInput = document.getElementById('leverage');
         this.priceMoveToTPInput = document.getElementById('priceMoveToTP');
-        this.requiredMarginInput = document.getElementById('requiredMargin');
+        this.marginRequiredInput = document.getElementById('marginRequired'); // Renamed from requiredMarginInput
         this.initialTradeValueInput = document.getElementById('initialTradeValue');
         this.tpPercentInput = document.getElementById('tpPercent');
         this.tpValueInput = document.getElementById('tpValue');
@@ -116,7 +118,10 @@ class GridTradingCalculator {
                 const row = e.target.closest('tr');
                 if (row) {
                     const symbol = row.cells[0].textContent;
-                    const price = parseFloat(row.cells[1].textContent);
+                    // Find the actual price from our pairs data instead of parsing from table
+                    const pairData = this.pairs.find(p => p.symbol === symbol);
+                    const price = pairData ? pairData.lastPrice : 0;
+                    console.log('Selected pair:', symbol, 'with price:', price);
                     this.selectTradingPair(symbol, price);
                 }
             });
@@ -132,13 +137,54 @@ class GridTradingCalculator {
             this.gridMultiplierInput,
             this.tradeSizeMultiplierInput,
             this.entryPriceInput,
-            this.tpPercentInput
+            this.tpPercentInput,
+            this.initialTradeValueInput,
+            this.tpValueInput
         ];
 
         tradingInputs.forEach(input => {
             if (input) {
                 input.addEventListener('input', () => {
-                    console.log(`${input.id} changed, recalculating...`);
+                    console.log(`${input.id} changed to ${input.value}, recalculating...`);
+                    
+                    // If initialTradeValue was changed, update tradeSizePercent
+                    if (input === this.initialTradeValueInput) {
+                        const margin = parseFloat(this.marginInput.value) || 0;
+                        if (margin > 0) {
+                            const newTradeSize = (parseFloat(input.value) / margin) * 100;
+                            this.tradeSizePercentInput.value = newTradeSize.toFixed(2);
+                        }
+                    }
+                    
+                    // If tradeSizePercent was changed, update initialTradeValue
+                    if (input === this.tradeSizePercentInput) {
+                        const margin = parseFloat(this.marginInput.value) || 0;
+                        const tradeSize = (margin * parseFloat(input.value)) / 100;
+                        if (!isNaN(tradeSize) && document.activeElement !== this.initialTradeValueInput) {
+                            this.initialTradeValueInput.value = tradeSize.toFixed(2);
+                        }
+                    }
+                    
+                    // If tpValue was changed, update tpPercent
+                    if (input === this.tpValueInput) {
+                        const initialTradeValue = parseFloat(this.initialTradeValueInput.value) || 0;
+                        const leverage = parseFloat(this.leverageInput.value) || 1;
+                        if (initialTradeValue > 0) {
+                            const newTpPercent = (parseFloat(input.value) * 100) / (initialTradeValue * leverage);
+                            this.tpPercentInput.value = newTpPercent.toFixed(2);
+                        }
+                    }
+                    
+                    // If tpPercent was changed, update tpValue
+                    if (input === this.tpPercentInput) {
+                        const initialTradeValue = parseFloat(this.initialTradeValueInput.value) || 0;
+                        const leverage = parseFloat(this.leverageInput.value) || 1;
+                        const tpValue = (initialTradeValue * leverage * parseFloat(input.value)) / 100;
+                        if (!isNaN(tpValue) && document.activeElement !== this.tpValueInput) {
+                            this.tpValueInput.value = tpValue.toFixed(2);
+                        }
+                    }
+                    
                     this.calculateGrid();
                 });
             }
@@ -412,6 +458,27 @@ class GridTradingCalculator {
         }).format(price);
     }
 
+    getPairDecimals(symbol) {
+        // Common price decimal places for different types of pairs
+        if (symbol.endsWith('USDT') || symbol.endsWith('BUSD') || symbol.endsWith('USDC')) {
+            if (symbol.startsWith('BTC')) return 8;
+            if (symbol.startsWith('ETH')) return 6;
+            if (symbol.startsWith('BNB')) return 4;
+            // For most altcoins
+            return 4;
+        }
+        // For BTC pairs
+        if (symbol.endsWith('BTC')) return 8;
+        // For ETH pairs
+        if (symbol.endsWith('ETH')) return 6;
+        // Default
+        return 4;
+    }
+
+    formatPairPrice(price) {
+        return price.toFixed(this.getPairDecimals(this.tradingPairInput.value));
+    }
+
     calculateDailyRange(high, low) {
         return (((high - low) / low) * 100);
     }
@@ -419,14 +486,18 @@ class GridTradingCalculator {
     selectTradingPair(symbol, price) {
         console.log('Selecting trading pair:', symbol, 'at price:', price);
         
+        // Store the selected pair's price for reference
+        const selectedPair = this.pairs.find(p => p.symbol === symbol);
+        this.selectedPairPrice = selectedPair ? selectedPair.lastPrice : price;
+        
         // Update trading pair input
         if (this.tradingPairInput) {
             this.tradingPairInput.value = symbol;
         }
 
-        // Update entry price with proper precision
+        // Update entry price with same format as selected pair
         if (this.entryPriceInput) {
-            this.entryPriceInput.value = price.toFixed(8);
+            this.entryPriceInput.value = this.formatPairPrice(price);
         }
 
         // Set default values if not already set
@@ -447,7 +518,7 @@ class GridTradingCalculator {
         }
 
         if (this.gridSizeInput && !this.gridSizeInput.value) {
-            this.gridSizeInput.value = '2';
+            this.gridSizeInput.value = '5';
         }
 
         if (this.gridMultiplierInput && !this.gridMultiplierInput.value) {
@@ -488,7 +559,7 @@ class GridTradingCalculator {
         }
 
         if (this.gridSizeInput && !this.gridSizeInput.value) {
-            this.gridSizeInput.value = '2';
+            this.gridSizeInput.value = '5';
         }
 
         if (this.gridMultiplierInput && !this.gridMultiplierInput.value) {
@@ -508,98 +579,163 @@ class GridTradingCalculator {
     }
 
     calculateGrid() {
-        console.log('Calculating grid...');
-        
-        // Get input values
-        const entryPrice = parseFloat(this.entryPriceInput.value) || 0;
-        const margin = parseFloat(this.marginInput.value) || 0;
-        const tradeSizePercent = parseFloat(this.tradeSizePercentInput.value) || 0;
-        const leverage = parseFloat(this.leverageInput.value) || 0;
-        const gridLevels = parseInt(this.gridLevelsInput.value) || 0;
-        const gridSize = parseFloat(this.gridSizeInput.value) || 0;
-        const gridMultiplier = parseFloat(this.gridMultiplierInput.value) || 0;
-        const tradeSizeMultiplier = parseFloat(this.tradeSizeMultiplierInput.value) || 0;
-        const tpPercent = parseFloat(this.tpPercentInput.value) || 0;
-
-        // Validate inputs
-        if (!entryPrice || !margin || !tradeSizePercent || !leverage || !gridLevels || !gridSize || !gridMultiplier || !tradeSizeMultiplier || !tpPercent) {
-            console.warn('Invalid input values');
-            return;
-        }
-
         try {
-            // Calculate initial values
-            const initialTradeSize = (margin * tradeSizePercent) / 100;  // Initial USDT amount to trade
-            const initialTradeValue = (tradeSizePercent * margin) / 100;  // Initial trade value in USDT (matching Python script)
+            // Get and log input values
+            const entryPrice = parseFloat(this.entryPriceInput.value) || 0;
+            const margin = parseFloat(this.marginInput.value) || 0;
+            const tradeSizePercent = parseFloat(this.tradeSizePercentInput.value) || 0;
+            const leverage = parseFloat(this.leverageInput.value) || 0;
+            const gridLevels = parseInt(this.gridLevelsInput.value) || 0;
+            const gridSize = parseFloat(this.gridSizeInput.value) || 0;
+            const gridMultiplier = parseFloat(this.gridMultiplierInput.value) || 0;
+            const tradeSizeMultiplier = parseFloat(this.tradeSizeMultiplierInput.value) || 0;
+            const tpPercent = parseFloat(this.tpPercentInput.value) || 0;
+            const manualInitialTradeValue = parseFloat(this.initialTradeValueInput.value) || 0;
+            const manualTpValue = parseFloat(this.tpValueInput.value) || 0;
+
+            // Get the decimals from entry price for consistent formatting
+            const entryPriceStr = this.entryPriceInput.value;
+            const decimalPlaces = entryPriceStr.includes('.') ? entryPriceStr.split('.')[1].length : 2;
+            
+            // Custom price formatter to match entry price decimals
+            const formatMatchingDecimals = (value) => {
+                return value.toFixed(decimalPlaces);
+            };
+
+            console.log('Input values:', {
+                entryPrice,
+                margin,
+                tradeSizePercent,
+                leverage,
+                gridLevels,
+                gridSize,
+                gridMultiplier,
+                tradeSizeMultiplier,
+                tpPercent,
+                manualInitialTradeValue,
+                manualTpValue,
+                decimalPlaces
+            });
+
+            // Validate inputs
+            if (!entryPrice || !leverage || !gridLevels || !gridSize || !gridMultiplier || !tradeSizeMultiplier) {
+                console.warn('Invalid input values');
+                return;
+            }
+
+            // Calculate initial values based on whether initialTradeValue was manually set
+            let initialTradeValue;
+            if (document.activeElement === this.initialTradeValueInput) {
+                initialTradeValue = manualInitialTradeValue;
+            } else {
+                initialTradeValue = (margin * tradeSizePercent) / 100;
+                this.initialTradeValueInput.value = formatMatchingDecimals(initialTradeValue);
+            }
+            
+            console.log('Initial calculations:', {
+                initialTradeValue
+            });
             
             // Calculate take profit values
             const tpPrice = entryPrice * (1 + (tpPercent / 100));
-            const priceMoveToTP = tpPrice - entryPrice;  // Absolute price move needed to reach TP
-            const tpValue = (initialTradeValue * tpPercent * leverage) / 100;  // TP value in USDT
+            const priceMoveToTP = tpPrice - entryPrice;
             
+            // Calculate TP value based on whether it was manually set
+            let tpValue;
+            if (document.activeElement === this.tpValueInput) {
+                tpValue = manualTpValue;
+            } else {
+                tpValue = (initialTradeValue * leverage * tpPercent) / 100;
+                this.tpValueInput.value = formatMatchingDecimals(tpValue);
+            }
+
             // Calculate grid levels
-            let gridLevelsData = [];
-            let totalTradeSize = 0;
-            let averageEntryPrice = entryPrice;
-            let totalWeightedPrice = entryPrice * initialTradeSize;
+            const gridLevelsData = [];
+            let totalTradeSize = initialTradeValue; // Include initial position
+            let totalWeightedPrice = entryPrice * initialTradeValue;
+            let currentPrice = entryPrice;
+            let currentGridSize = gridSize; // Track the current grid size
             
             for (let i = 0; i < gridLevels; i++) {
-                const multiplier = Math.pow(gridMultiplier, i);
-                const levelGridSize = gridSize * multiplier;
-                const priceLevel = entryPrice * (1 - (levelGridSize / 100));
-                const tradeSize = initialTradeSize * Math.pow(tradeSizeMultiplier, i);
+                // Calculate grid size for this level
+                if (i > 0) {
+                    currentGridSize = currentGridSize * gridMultiplier;
+                }
+                
+                // Calculate price based on previous level's price
+                const priceLevel = currentPrice * (1 - (currentGridSize / 100));
+                const tradeSize = initialTradeValue * Math.pow(tradeSizeMultiplier, i);
                 const positionSize = tradeSize * leverage;
                 const requiredMargin = tradeSize;
                 const percentFromEntry = ((priceLevel - entryPrice) / entryPrice) * 100;
                 const pnlAtTp = (tradeSize * leverage * tpPercent) / 100;
                 
-                gridLevelsData.push({
-                    level: i + 1,
-                    price: priceLevel,
-                    gridSize: levelGridSize,
-                    tradeSize: tradeSize,
-                    positionSize: positionSize,
-                    requiredMargin: requiredMargin,
-                    percentFromEntry: percentFromEntry,
-                    pnlAtTp: pnlAtTp
+                console.log(`Grid Level ${i + 1}:`, {
+                    currentGridSize,
+                    priceLevel,
+                    tradeSize,
+                    positionSize,
+                    requiredMargin,
+                    percentFromEntry,
+                    pnlAtTp
                 });
                 
+                gridLevelsData.push({
+                    level: -(i + 1),  // Make levels negative
+                    price: formatMatchingDecimals(priceLevel),
+                    gridSize: currentGridSize,
+                    tradeSize: formatMatchingDecimals(tradeSize),
+                    positionSize: formatMatchingDecimals(positionSize),
+                    requiredMargin: formatMatchingDecimals(requiredMargin),
+                    percentFromEntry: percentFromEntry.toFixed(2),
+                    pnlAtTp: formatMatchingDecimals(pnlAtTp)
+                });
+                
+                // Update current price for next iteration
+                currentPrice = priceLevel;
                 totalTradeSize += tradeSize;
                 totalWeightedPrice += priceLevel * tradeSize;
             }
 
             // Calculate required margin and average entry
-            const requiredMargin = totalTradeSize * leverage;
-            averageEntryPrice = totalWeightedPrice / totalTradeSize;
+            const requiredMargin = totalTradeSize;
+            const averageEntryPrice = totalWeightedPrice / totalTradeSize;
+
+            console.log('Final calculations:', {
+                requiredMargin,
+                averageEntryPrice,
+                totalTradeSize,
+                totalWeightedPrice
+            });
 
             // Update UI elements
             if (this.initialTradeValueInput) {
-                this.initialTradeValueInput.value = this.formatUSDT(initialTradeValue);
+                this.initialTradeValueInput.value = formatMatchingDecimals(initialTradeValue);
             }
 
             if (this.priceMoveToTPInput) {
-                this.priceMoveToTPInput.value = this.formatUSDT(priceMoveToTP);
+                this.priceMoveToTPInput.value = formatMatchingDecimals(priceMoveToTP);
             }
 
             if (this.marginRequiredInput) {
-                this.marginRequiredInput.value = this.formatUSDT(requiredMargin);
+                this.marginRequiredInput.value = formatMatchingDecimals(requiredMargin);
             }
 
             if (this.tpValueInput) {
-                this.tpValueInput.value = this.formatUSDT(tpValue);
+                this.tpValueInput.value = formatMatchingDecimals(tpValue);
             }
 
             if (this.tpPriceInput) {
-                this.tpPriceInput.value = this.formatPrice(tpPrice);
+                this.tpPriceInput.value = formatMatchingDecimals(tpPrice);
             }
 
             if (this.averageEntryInput) {
-                this.averageEntryInput.value = this.formatPrice(averageEntryPrice);
+                this.averageEntryInput.value = formatMatchingDecimals(averageEntryPrice);
             }
 
             // Update grid levels table
             this.updateGridLevelsTable(gridLevelsData);
-            
+
         } catch (error) {
             console.error('Error calculating grid:', error);
             this.showError('Failed to calculate grid: ' + error.message);
@@ -611,13 +747,13 @@ class GridTradingCalculator {
             return `
                 <tr>
                     <td>${level.level}</td>
-                    <td>${this.formatPrice(level.price)}</td>
+                    <td>${level.price}</td>
                     <td>${level.gridSize.toFixed(2)}%</td>
-                    <td>${this.formatUSDT(level.tradeSize)}</td>
-                    <td>${this.formatUSDT(level.positionSize)}</td>
-                    <td>${this.formatUSDT(level.requiredMargin)}</td>
-                    <td>${level.percentFromEntry.toFixed(2)}%</td>
-                    <td>${this.formatUSDT(level.pnlAtTp)}</td>
+                    <td>${level.tradeSize}</td>
+                    <td>${level.positionSize}</td>
+                    <td>${level.requiredMargin}</td>
+                    <td>${level.percentFromEntry}%</td>
+                    <td>${level.pnlAtTp}</td>
                 </tr>
             `;
         }).join('');
