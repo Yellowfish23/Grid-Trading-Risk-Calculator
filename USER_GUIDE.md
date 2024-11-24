@@ -1,187 +1,151 @@
-# Grid Trading Calculator User Guide
+# Grid Trading Risk Calculator - User Guide
 
 ## Overview
-The Grid Trading Calculator is a powerful tool designed to help traders plan and analyze grid trading strategies for cryptocurrency perpetual trading. It provides real-time market data, grid level calculations, and risk management analysis.
+The Grid Trading Risk Calculator is a specialized tool designed for cryptocurrency perpetual futures trading. It helps traders calculate and visualize grid trading strategies with real-time market data integration.
 
-## Market Data Interface
+## Key Features
 
-### Top Pairs Table
-- Shows top cryptocurrency pairs by market capitalization
-- Updates in real-time with latest market data
-- Displays key metrics for each pair:
-  * Symbol (e.g., BTC/USDT)
-  * Current Price
-  * 24h Price Change %
-  * Daily Range % (D1R% - D5R%)
-  * 5-day Average Range (AvgR%)
-  * Market Cap in Billions
+### Real-Time Market Data
+- Live price updates from Binance API
+- Top trading pairs display with volume metrics
+- Automatic price population when selecting trading pairs
 
-### Market Analysis Features
-1. **Daily Range Calculation**
-   ```
-   For each day (D1-D5):
-   Daily Range % = ((High - Low) / Low) × 100
-   5-day Average = Mean of last 5 daily ranges
-   ```
-   - Helps determine optimal grid spacing
-   - Provides volatility metrics for strategy adjustment
+### Trading Settings
 
-2. **Table Functionality**
-   - Click headers to sort by any column
-   - Default sort by Market Cap (descending)
-   - Click rows to select trading pairs
-   - Selected pair updates all calculations
+#### Basic Parameters
+- Trading Pair Selection
+- Entry Price (auto-populated or manual entry)
+- Initial Capital (USDT)
+- Initial Trade Size % (default: 10%)
 
-3. **Data Sources**
-   - Price data: Binance API (real-time)
-   - Market caps: CoinGecko API (5-min cache)
-   - Historical ranges: Calculated from market data
+#### Grid Configuration
+- Grid Levels (default: 3)
+- Grid Size % (default: 2%)
+- Grid Size Multiplier (default: 0.9)
+  - Controls the progression of grid spacing
+  - Values < 1 create tighter grids at lower levels
+  - Values > 1 create wider grids at lower levels
+- Trade Size Multiplier (default: 1.15)
+  - Controls position size progression
+  - Values > 1 increase position sizes at lower levels
+  - Values < 1 decrease position sizes at lower levels
 
-## Key Concepts and Calculations
+#### Risk Management
+- Leverage (default: 3x)
+- Take Profit % (default: 10%)
+- Automatic margin calculation
+- Dynamic position sizing
 
-### Basic Terms
-- **Initial Capital**: Your starting USDT amount
-- **Trade Size Percentage**: Percentage of capital for initial trade
-- **Entry Price**: Current market price of the trading pair
-- **Leverage**: Multiplier for position size (e.g., 3x)
-- **Grid Levels**: Number of buy orders below entry
-- **Grid Size**: Percentage distance between levels
-- **Grid Multiplier**: Factor for increasing grid sizes
-- **Trade Size Multiplier**: Factor for increasing trade sizes
-
-### Core Calculations
-
-1. **Initial Trade Calculations**
-   ```
-   Initial Trade Size = (Initial Capital × Trade Size %) / 100
-   Initial Position Size = Initial Trade Size × Leverage
-   Initial Trade Value = Initial Capital × Trade Size % / 100
-   ```
-   Example with $1000 capital, 10% trade size, 3x leverage at SOL price $247.53:
-   - Initial Trade Size = $1000 × 10% = $100
-   - Initial Position Size = $100 × 3 = $300
-   - Initial Trade Value = $1000 × 10% = $100
-
-2. **Grid Level Calculations**
-   For each level (i), where i starts at 0:
-   ```
-   Grid Size[i] = Base Grid Size × Grid Multiplier^i
-   Price Level[i] = Entry Price × (1 - Grid Size[i]/100)
-   Trade Size[i] = Initial Trade Size × Trade Size Multiplier^i
-   Position Size[i] = Trade Size[i] × Leverage
-   ```
-   Example with 2% base grid size, 1.5x multipliers:
-   
-   Level 1:
-   - Grid Size = 2% × 1.5^0 = 2%
-   - Price = $247.53 × (1 - 2/100) = $242.58
-   - Trade Size = $100 × 1.5^0 = $100
-   - Position Size = $100 × 3 = $300
-
-   Level 2:
-   - Grid Size = 2% × 1.5^1 = 3%
-   - Price = $247.53 × (1 - 3/100) = $240.10
-   - Trade Size = $100 × 1.5^1 = $150
-   - Position Size = $150 × 3 = $450
-
-   Level 3:
-   - Grid Size = 2% × 1.5^2 = 4.5%
-   - Price = $247.53 × (1 - 4.5/100) = $236.39
-   - Trade Size = $100 × 1.5^2 = $225
-   - Position Size = $225 × 3 = $675
-
-3. **Take Profit Calculations**
-   ```
-   Take Profit Price = Entry Price × (1 + Base Grid Size/100)
-   ```
-   Example:
-   - Take Profit = $247.53 × (1 + 2/100) = $252.48
-
-4. **Total Position Analysis**
-   ```
-   Total Position Value = Sum of all Position Sizes
-   Total Trade Size = Sum of all Trade Sizes
-   Required Margin = Total Position Value / Leverage
-   ```
-   Example with 3 levels:
-   - Total Position Value = $300 + $450 + $675 = $1,425
-   - Total Trade Size = $100 + $150 + $225 = $475
-   - Required Margin = $1,425 / 3 = $475
+### Grid Analysis Table
+- Entry prices for each grid level
+- Position sizes per level
+- Required margin per level
+- Cumulative position information
+- Profit targets per level
+- Distance from entry price
+- PnL calculations at take profit
 
 ## How to Use
 
-1. **Select Trading Pair**
-   - Choose from the top pairs list sorted by market cap
-   - Current price and market data auto-populate
-   - Use 5-day Average Range for volatility assessment
-   - Consider market cap for liquidity assessment
+1. Market Selection
+   - View top trading pairs sorted by volume
+   - Click any pair to automatically populate trading settings
+   - Prices update in real-time
 
-2. **Configure Grid Parameters**
-   - Set your initial capital (e.g., $1000)
-   - Choose trade size percentage (e.g., 10%)
-   - Current market price is auto-filled
-   - Select leverage (recommended: 1-3x)
-   - Set grid levels (recommended: 3-5)
-   - Adjust grid size (recommended: 1-3%)
-   - Set multipliers (recommended: 1.2-1.5x)
+2. Configure Trading Parameters
+   - Set your initial capital
+   - Adjust trade size percentage
+   - Configure leverage
+   - Set grid parameters
+   - Adjust take profit target
 
-3. **Analyze Results**
-   The calculator displays for each grid level:
-   - Entry price and grid prices
-   - Individual position sizes
-   - Required margin per level
-   - Take profit targets
-   - Cumulative position value
-   - Total required margin
-   - Maximum drawdown potential
+3. Analyze Grid Levels
+   - Review entry prices for each level
+   - Verify position sizes
+   - Check margin requirements
+   - Evaluate potential profits
 
-4. **Risk Management**
-   - Monitor required margin vs available capital
-   - Keep total position size manageable
-   - Consider reducing leverage if total exposure > 2x capital
-   - Watch grid multiplier effect on lower levels
-   - Use the 5-day Average Range to validate grid spacing
+4. Monitor and Adjust
+   - Watch real-time price updates
+   - Adjust parameters as needed
+   - View updated calculations instantly
+
+## Understanding Grid Multipliers
+
+### Grid Size Multiplier (0.9)
+- Controls the spacing between grid levels
+- Example with 2% base grid size:
+  - Level 1: 2%
+  - Level 2: 1.8% (2% × 0.9)
+  - Level 3: 1.62% (1.8% × 0.9)
+
+### Trade Size Multiplier (1.15)
+- Controls position size progression
+- Example with $100 base position:
+  - Level 1: $100
+  - Level 2: $115 ($100 × 1.15)
+  - Level 3: $132.25 ($115 × 1.15)
+
+## Calculation Methods
+
+### Position Sizing
+- Base position = Initial Capital × Trade Size %
+- Subsequent positions = Previous Position × Trade Size Multiplier
+
+### Grid Levels
+- First level = Entry Price × (1 - Grid Size %)
+- Subsequent levels = Previous Level × (1 - (Grid Size % × Grid Size Multiplier))
+
+### Take Profit Calculations
+- TP Price = Entry Price × (1 + TP %)
+- TP Value = Position Size × TP % × Leverage
 
 ## Best Practices
 
-1. **Position Sizing**
-   - Start with 5-10% of capital for initial trade
-   - Use lower trade size % with higher grid levels
-   - Account for trade size multiplier effect
-   - Consider total margin requirements
+1. Risk Management
+   - Start with smaller position sizes
+   - Use moderate leverage (3x recommended)
+   - Monitor total margin requirements
 
-2. **Grid Spacing**
-   - Use smaller grids (1-2%) for less volatile pairs
-   - Larger grids (2-3%) for more volatile pairs
-   - Compare grid size to daily ranges (D1R%-D5R%)
-   - Adjust based on 5-day Average Range (AvgR%)
+2. Grid Setup
+   - Use tighter grids (smaller Grid Size %) in less volatile markets
+   - Use wider grids in more volatile markets
+   - Adjust multipliers based on market conditions
 
-3. **Leverage Usage**
-   - Keep leverage modest (1-3x recommended)
-   - Calculate total exposure including all grid levels
-   - Account for worst-case scenarios
-   - Monitor liquidation prices carefully
+3. Position Sizing
+   - Ensure sufficient capital for all grid levels
+   - Account for leverage in margin calculations
+   - Consider market liquidity when sizing positions
 
-4. **Market Conditions**
-   - Check 5-day price range for volatility
-   - Monitor funding rates for perpetual pairs
-   - Consider market direction and trend
-   - Use market cap for liquidity assessment
+## Access and Updates
 
-## Data Updates and Maintenance
-- Real-time price updates via Binance API
-- 5-minute market cap cache from CoinGecko
-- Automatic data refresh system
-- Persistent settings storage
+### Online Access
+- Calculator available at: https://yellowfish23.github.io/Grid-Trading-Risk-Calculator/
+- No installation required
+- Works on all modern browsers
 
-## Troubleshooting
-- If calculations seem off, verify input parameters
-- Use the "Reset" button to clear all inputs
-- Refresh page for latest market data
-- Check connection for real-time updates
-- Clear browser cache if table sorting issues occur
+### Updates and Maintenance
+- Regular updates via GitHub repository
+- Automatic market data updates
+- Real-time calculation updates
 
-For technical support or feature requests, please refer to the project repository.
+## Technical Notes
 
----
-Last Updated: ${new Date().toISOString().split('T')[0]}
+### Market Data Sources
+- Primary: Binance API
+- Secondary: CoinGecko API
+- Automatic failover between sources
+
+### Browser Compatibility
+- Chrome (recommended)
+- Firefox
+- Safari
+- Edge
+
+### Performance
+- Real-time calculations
+- Responsive design
+- Mobile-friendly interface
+
+## Disclaimer
+This calculator is for informational purposes only. Always verify calculations and conduct proper risk management before trading. Past performance does not guarantee future results.
