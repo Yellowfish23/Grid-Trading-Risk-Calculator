@@ -182,6 +182,17 @@ tr.selected-pair td {
     font-weight: bold !important;
 }
 
+/* Readonly field styles */
+.readonly-field {
+    background-color: #e9ecef !important;  /* Darker grey color */
+    cursor: not-allowed;
+}
+
+.readonly-field:focus {
+    background-color: #e9ecef !important;  /* Keep the same color when focused */
+    cursor: not-allowed;
+}
+
 @media (max-width: 768px) {
     .container {
         padding: 0.5rem;
