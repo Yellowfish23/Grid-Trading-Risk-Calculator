@@ -5,7 +5,7 @@ class GridTradingCalculator {
         this.coingeckoEndpoint = 'https://api.coingecko.com/api/v3/coins/markets';
         
         // Configuration
-        this.pairCount = 10;
+        this.pairCount = 3;  // Changed default to 3
         this.isUpdating = false;
         this.sortColumn = 'marketCap';
         this.sortDirection = 'desc';
@@ -13,7 +13,7 @@ class GridTradingCalculator {
         this.updateInterval = null;
         
         // Default trading pair
-        this.defaultPair = 'BTCUSDT';
+        this.defaultPair = 'SOLUSDT';  // Fixed from SOLUST to SOLUSDT
         this.selectedPairPrice = null;  // Store the selected pair's price format
         this.pairs = [];
         this.marketCaps = {};
@@ -31,7 +31,8 @@ class GridTradingCalculator {
         this.tradeSizePercentInput = null;
         this.leverageInput = null;
         this.priceMoveToTPInput = null;
-        this.requiredMarginInput = null;
+        this.priceMoveToTPPercentInput = null;
+        this.marginRequiredInput = null;
         this.initialTradeValueInput = null;
         this.tpPercentInput = null;
         this.tpValueInput = null;
@@ -41,7 +42,9 @@ class GridTradingCalculator {
         this.tradeSizeMultiplierInput = null;
         this.tpPriceInput = null;
         this.averageEntryInput = null;
-        this.marginRequiredInput = null; // Renamed from requiredMarginInput
+        this.gridLevelsTableBody = null;
+
+        // Removed totalPnlAtTpInput
     }
 
     initializeElements() {
@@ -51,7 +54,7 @@ class GridTradingCalculator {
         this.pairsTableBody = document.getElementById('pairsTableBody');
         this.statusDiv = document.getElementById('status');
         this.updateButton = document.getElementById('updateButton');
-        this.autoUpdateSwitch = document.getElementById('autoUpdateSwitch');
+        this.autoUpdateSwitch = document.getElementById('autoUpdate');
         
         // Trading settings elements
         this.entryPriceInput = document.getElementById('entryPrice');
@@ -59,7 +62,8 @@ class GridTradingCalculator {
         this.tradeSizePercentInput = document.getElementById('tradeSizePercent');
         this.leverageInput = document.getElementById('leverage');
         this.priceMoveToTPInput = document.getElementById('priceMoveToTP');
-        this.marginRequiredInput = document.getElementById('marginRequired'); // Renamed from requiredMarginInput
+        this.priceMoveToTPPercentInput = document.getElementById('priceMoveToTPPercent');
+        this.marginRequiredInput = document.getElementById('marginRequired');
         this.initialTradeValueInput = document.getElementById('initialTradeValue');
         this.tpPercentInput = document.getElementById('tpPercent');
         this.tpValueInput = document.getElementById('tpValue');
@@ -69,15 +73,64 @@ class GridTradingCalculator {
         this.tradeSizeMultiplierInput = document.getElementById('tradeSizeMultiplier');
         this.tpPriceInput = document.getElementById('tpPrice');
         this.averageEntryInput = document.getElementById('averageEntry');
-        
-        // Log any missing elements
-        Object.entries(this).forEach(([key, value]) => {
-            if (key.endsWith('Input') || key.endsWith('Select') || key.endsWith('Body') || key.endsWith('Div')) {
-                if (!value) {
-                    console.warn(`Missing element: ${key}`);
-                }
+        this.gridLevelsTableBody = document.getElementById('gridLevelsTableBody');
+
+        // Removed totalPnlAtTpInput
+
+        // Log any missing elements and prevent calculation if any are missing
+        let missingElements = [];
+        const requiredElements = {
+            'tradingPair': this.tradingPairInput,
+            'pairCount': this.pairCountSelect,
+            'pairsTableBody': this.pairsTableBody,
+            'status': this.statusDiv,
+            'updateButton': this.updateButton,
+            'autoUpdate': this.autoUpdateSwitch,
+            'entryPrice': this.entryPriceInput,
+            'margin': this.marginInput,
+            'tradeSizePercent': this.tradeSizePercentInput,
+            'leverage': this.leverageInput,
+            'priceMoveToTP': this.priceMoveToTPInput,
+            'priceMoveToTPPercent': this.priceMoveToTPPercentInput,
+            'marginRequired': this.marginRequiredInput,
+            'initialTradeValue': this.initialTradeValueInput,
+            'tpPercent': this.tpPercentInput,
+            'tpValue': this.tpValueInput,
+            'gridLevels': this.gridLevelsInput,
+            'gridSize': this.gridSizeInput,
+            'gridMultiplier': this.gridMultiplierInput,
+            'tradeSizeMultiplier': this.tradeSizeMultiplierInput,
+            'tpPrice': this.tpPriceInput,
+            'averageEntry': this.averageEntryInput,
+            'gridLevelsTableBody': this.gridLevelsTableBody
+        };
+
+        // Removed totalPnlAtTpInput
+
+        // Check each required element
+        for (const [id, element] of Object.entries(requiredElements)) {
+            if (!element) {
+                missingElements.push(id);
+                console.warn(`Missing element: ${id}`);
             }
-        });
+        }
+
+        // Only proceed with initialization if all elements exist
+        if (missingElements.length === 0) {
+            this.setDefaultValues();
+            this.setupEventListeners();
+            this.fetchTopPairs();
+        } else {
+            console.error('Missing UI elements:', missingElements);
+            if (this.statusDiv) {
+                this.statusDiv.innerHTML = `<div class="alert alert-danger">Error: Missing UI elements: ${missingElements.join(', ')}</div>`;
+            }
+        }
+    }
+
+    init() {
+        console.log('Initializing calculator...');
+        this.initializeElements();
     }
 
     setupEventListeners() {
@@ -107,28 +160,8 @@ class GridTradingCalculator {
             });
         }
 
-        // Table sorting
-        document.querySelectorAll('.sortable').forEach(header => {
-            header.addEventListener('click', (e) => this.handleSort(e));
-        });
-
-        // Pair selection from table
-        if (this.pairsTableBody) {
-            this.pairsTableBody.addEventListener('click', (e) => {
-                const row = e.target.closest('tr');
-                if (row) {
-                    const symbol = row.cells[0].textContent;
-                    // Find the actual price from our pairs data instead of parsing from table
-                    const pairData = this.pairs.find(p => p.symbol === symbol);
-                    const price = pairData ? pairData.lastPrice : 0;
-                    console.log('Selected pair:', symbol, 'with price:', price);
-                    this.selectTradingPair(symbol, price);
-                }
-            });
-        }
-
-        // Trading settings changes
-        const tradingInputs = [
+        // Add input event listeners for grid calculations
+        const inputElements = [
             this.marginInput,
             this.tradeSizePercentInput,
             this.leverageInput,
@@ -136,170 +169,66 @@ class GridTradingCalculator {
             this.gridSizeInput,
             this.gridMultiplierInput,
             this.tradeSizeMultiplierInput,
-            this.entryPriceInput,
             this.tpPercentInput,
             this.initialTradeValueInput,
             this.tpValueInput
         ];
 
-        tradingInputs.forEach(input => {
-            if (input) {
-                input.addEventListener('input', () => {
-                    console.log(`${input.id} changed to ${input.value}, recalculating...`);
-                    
-                    // If initialTradeValue was changed, update tradeSizePercent
-                    if (input === this.initialTradeValueInput) {
-                        const margin = parseFloat(this.marginInput.value) || 0;
-                        if (margin > 0) {
-                            const newTradeSize = (parseFloat(input.value) / margin) * 100;
-                            this.tradeSizePercentInput.value = newTradeSize.toFixed(2);
-                        }
-                    }
-                    
-                    // If tradeSizePercent was changed, update initialTradeValue
-                    if (input === this.tradeSizePercentInput) {
-                        const margin = parseFloat(this.marginInput.value) || 0;
-                        const tradeSize = (margin * parseFloat(input.value)) / 100;
-                        if (!isNaN(tradeSize) && document.activeElement !== this.initialTradeValueInput) {
-                            this.initialTradeValueInput.value = tradeSize.toFixed(2);
-                        }
-                    }
-                    
-                    // If tpValue was changed, update tpPercent
-                    if (input === this.tpValueInput) {
-                        const initialTradeValue = parseFloat(this.initialTradeValueInput.value) || 0;
-                        const leverage = parseFloat(this.leverageInput.value) || 1;
-                        if (initialTradeValue > 0) {
-                            const newTpPercent = (parseFloat(input.value) * 100) / (initialTradeValue * leverage);
-                            this.tpPercentInput.value = newTpPercent.toFixed(2);
-                        }
-                    }
-                    
-                    // If tpPercent was changed, update tpValue
-                    if (input === this.tpPercentInput) {
-                        const initialTradeValue = parseFloat(this.initialTradeValueInput.value) || 0;
-                        const leverage = parseFloat(this.leverageInput.value) || 1;
-                        const tpValue = (initialTradeValue * leverage * parseFloat(input.value)) / 100;
-                        if (!isNaN(tpValue) && document.activeElement !== this.tpValueInput) {
-                            this.tpValueInput.value = tpValue.toFixed(2);
-                        }
-                    }
-                    
+        inputElements.forEach(element => {
+            if (element) {
+                element.addEventListener('input', () => {
                     this.calculateGrid();
                 });
             }
         });
-
-        // Pair count selection
-        if (this.pairCountSelect) {
-            this.pairCountSelect.addEventListener('change', () => {
-                this.pairCount = parseInt(this.pairCountSelect.value);
-                this.fetchTopPairs();
-            });
-        }
     }
 
-    async init() {
-        try {
-            console.log('Initializing calculator...');
-            this.showLoading('Initializing calculator...');
-            
-            // Initialize elements
-            this.initializeElements();
-            
-            // Set up event listeners
-            this.setupEventListeners();
-            
-            // Fetch initial data
-            await this.fetchTopPairs();
-            
-            console.log('Calculator initialized successfully');
-            this.showSuccess('Calculator initialized successfully');
-            
-            // Automatically select SOLUSDT
-            const solData = this.pairs.find(pair => pair.symbol === 'SOLUSDT');
-            if (solData) {
-                this.selectTradingPair(solData.symbol, solData.lastPrice);
-            }
+    setDefaultValues() {
+        const defaultValues = {
+            pairCount: '3',
+            margin: '1000',
+            tradeSizePercent: '10',
+            leverage: '3',
+            gridLevels: '5',
+            gridSize: '5',
+            gridMultiplier: '0.9',
+            tradeSizeMultiplier: '1.15',
+            tpPercent: '10'
+        };
 
-            // Clear any existing update interval
-            if (this.updateInterval) {
-                clearInterval(this.updateInterval);
-                this.updateInterval = null;
-            }
-        } catch (error) {
-            console.error('Initialization failed:', error);
-            this.showError('Failed to initialize calculator: ' + error.message);
+        // Set default values only if the field is empty
+        if (this.pairCountSelect && !this.pairCountSelect.value) {
+            this.pairCountSelect.value = defaultValues.pairCount;
         }
-    }
+        if (this.marginInput && !this.marginInput.value) {
+            this.marginInput.value = defaultValues.margin;
+        }
+        if (this.tradeSizePercentInput && !this.tradeSizePercentInput.value) {
+            this.tradeSizePercentInput.value = defaultValues.tradeSizePercent;
+        }
+        if (this.leverageInput && !this.leverageInput.value) {
+            this.leverageInput.value = defaultValues.leverage;
+        }
+        if (this.gridLevelsInput && !this.gridLevelsInput.value) {
+            this.gridLevelsInput.value = defaultValues.gridLevels;
+        }
+        if (this.gridSizeInput && !this.gridSizeInput.value) {
+            this.gridSizeInput.value = defaultValues.gridSize;
+        }
+        if (this.gridMultiplierInput && !this.gridMultiplierInput.value) {
+            this.gridMultiplierInput.value = defaultValues.gridMultiplier;
+        }
+        if (this.tradeSizeMultiplierInput && !this.tradeSizeMultiplierInput.value) {
+            this.tradeSizeMultiplierInput.value = defaultValues.tradeSizeMultiplier;
+        }
+        if (this.tpPercentInput && !this.tpPercentInput.value) {
+            this.tpPercentInput.value = defaultValues.tpPercent;
+        }
 
-    showError(message) {
-        console.error(message);
-        if (this.statusDiv) {
-            this.statusDiv.style.display = 'block';
-            this.statusDiv.className = 'alert alert-danger mb-3';
-            this.statusDiv.textContent = message;
+        // Initial grid calculation
+        if (this.entryPriceInput && this.entryPriceInput.value) {
+            this.calculateGrid();
         }
-    }
-
-    showSuccess(message) {
-        console.log(message);
-        if (this.statusDiv) {
-            this.statusDiv.style.display = 'block';
-            this.statusDiv.className = 'alert alert-success mb-3';
-            this.statusDiv.textContent = message;
-            setTimeout(() => {
-                this.statusDiv.style.display = 'none';
-            }, 3000);
-        }
-    }
-
-    showLoading(message = 'Loading...') {
-        console.log(message);
-        if (this.statusDiv) {
-            this.statusDiv.style.display = 'block';
-            this.statusDiv.className = 'alert alert-info mb-3';
-            this.statusDiv.innerHTML = `<div class="spinner-border spinner-border-sm me-2" role="status"></div>${message}`;
-        }
-    }
-
-    async fetchHistoricalData(symbol) {
-        const ranges = [];
-        const now = Date.now();
-        
-        for (let i = 1; i <= 5; i++) {
-            const startTime = now - (i * 24 * 60 * 60 * 1000);
-            const endTime = now - ((i-1) * 24 * 60 * 60 * 1000);
-            
-            try {
-                const response = await fetch(
-                    `${this.binanceEndpoint}/klines?symbol=${symbol}&interval=1d&startTime=${startTime}&endTime=${endTime}&limit=1`
-                );
-                
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                
-                const data = await response.json();
-                if (data && data.length > 0) {
-                    const high = parseFloat(data[0][2]);
-                    const low = parseFloat(data[0][3]);
-                    const range = this.calculateDailyRange(high, low);
-                    ranges.push(range);
-                } else {
-                    ranges.push(0);
-                }
-                
-                // Add a small delay to avoid rate limits
-                await new Promise(resolve => setTimeout(resolve, 100));
-                
-            } catch (error) {
-                console.error(`Error fetching historical data for ${symbol}, day ${i}:`, error);
-                ranges.push(0);
-            }
-        }
-        
-        return ranges;
     }
 
     async fetchTopPairs() {
@@ -402,6 +331,12 @@ class GridTradingCalculator {
             
             this.lastUpdate = new Date();
             this.showSuccess('Market data updated successfully');
+
+            // Automatically select SOLUSDT
+            const solData = this.pairs.find(pair => pair.symbol === 'SOLUSDT');
+            if (solData) {
+                this.selectTradingPair(solData.symbol, solData.lastPrice);
+            }
             
         } catch (error) {
             console.error('Error fetching pairs:', error);
@@ -537,47 +472,6 @@ class GridTradingCalculator {
         this.calculateGrid();
     }
 
-    setDefaultValues() {
-        if (this.pairCountSelect && !this.pairCountSelect.value) {
-            this.pairCountSelect.value = '10';
-        }
-
-        if (this.marginInput && !this.marginInput.value) {
-            this.marginInput.value = '1000';
-        }
-
-        if (this.tradeSizePercentInput && !this.tradeSizePercentInput.value) {
-            this.tradeSizePercentInput.value = '10';
-        }
-
-        if (this.leverageInput && !this.leverageInput.value) {
-            this.leverageInput.value = '3';
-        }
-
-        if (this.gridLevelsInput && !this.gridLevelsInput.value) {
-            this.gridLevelsInput.value = '5';
-        }
-
-        if (this.gridSizeInput && !this.gridSizeInput.value) {
-            this.gridSizeInput.value = '5';
-        }
-
-        if (this.gridMultiplierInput && !this.gridMultiplierInput.value) {
-            this.gridMultiplierInput.value = '0.9';
-        }
-
-        if (this.tradeSizeMultiplierInput && !this.tradeSizeMultiplierInput.value) {
-            this.tradeSizeMultiplierInput.value = '1.15';
-        }
-
-        if (this.tpPercentInput && !this.tpPercentInput.value) {
-            this.tpPercentInput.value = '10';
-        }
-
-        // Calculate everything based on new values
-        this.calculateGrid();
-    }
-
     calculateGrid() {
         try {
             // Get and log input values
@@ -639,6 +533,7 @@ class GridTradingCalculator {
             // Calculate take profit values
             const tpPrice = entryPrice * (1 + (tpPercent / 100));
             const priceMoveToTP = tpPrice - entryPrice;
+            const priceMoveToTPPercent = ((tpPrice - entryPrice) / entryPrice) * 100;
             
             // Calculate TP value based on whether it was manually set
             let tpValue;
@@ -655,6 +550,18 @@ class GridTradingCalculator {
             let totalWeightedPrice = entryPrice * initialTradeValue;
             let currentPrice = entryPrice;
             let currentGridSize = gridSize; // Track the current grid size
+
+            // Add level 0 (initial trade)
+            gridLevelsData.push({
+                level: 0,
+                price: formatMatchingDecimals(entryPrice),
+                gridSize: 0, // No grid size for initial trade
+                tradeSize: formatMatchingDecimals(initialTradeValue),
+                positionSize: formatMatchingDecimals(initialTradeValue * leverage),
+                requiredMargin: formatMatchingDecimals(initialTradeValue),
+                percentFromEntry: "0.00",
+                pnlAtTp: formatMatchingDecimals((initialTradeValue * leverage * tpPercent) / 100)
+            });
             
             for (let i = 0; i < gridLevels; i++) {
                 // Calculate grid size for this level
@@ -708,27 +615,19 @@ class GridTradingCalculator {
                 totalWeightedPrice
             });
 
-            // Update UI elements
-            if (this.initialTradeValueInput) {
-                this.initialTradeValueInput.value = formatMatchingDecimals(initialTradeValue);
-            }
-
-            if (this.priceMoveToTPInput) {
-                this.priceMoveToTPInput.value = formatMatchingDecimals(priceMoveToTP);
-            }
-
-            if (this.marginRequiredInput) {
-                this.marginRequiredInput.value = formatMatchingDecimals(requiredMargin);
-            }
-
-            if (this.tpValueInput) {
-                this.tpValueInput.value = formatMatchingDecimals(tpValue);
-            }
-
+            // Update the UI with calculated values
             if (this.tpPriceInput) {
                 this.tpPriceInput.value = formatMatchingDecimals(tpPrice);
             }
-
+            if (this.priceMoveToTPInput) {
+                this.priceMoveToTPInput.value = formatMatchingDecimals(priceMoveToTP);
+            }
+            if (this.priceMoveToTPPercentInput) {
+                this.priceMoveToTPPercentInput.value = priceMoveToTPPercent.toFixed(2);
+            }
+            if (this.marginRequiredInput) {
+                this.marginRequiredInput.value = formatMatchingDecimals(requiredMargin);
+            }
             if (this.averageEntryInput) {
                 this.averageEntryInput.value = formatMatchingDecimals(averageEntryPrice);
             }
@@ -738,17 +637,19 @@ class GridTradingCalculator {
 
         } catch (error) {
             console.error('Error calculating grid:', error);
-            this.showError('Failed to calculate grid: ' + error.message);
         }
     }
 
     updateGridLevelsTable(gridLevelsData) {
         const tableContent = gridLevelsData.map(level => {
+            const levelClass = level.level === 0 ? 'table-primary' : '';
+            const gridSizeDisplay = level.level === 0 ? '-' : `${level.gridSize.toFixed(2)}%`;
+            
             return `
-                <tr>
+                <tr class="${levelClass}">
                     <td>${level.level}</td>
                     <td>${level.price}</td>
-                    <td>${level.gridSize.toFixed(2)}%</td>
+                    <td>${gridSizeDisplay}</td>
                     <td>${level.tradeSize}</td>
                     <td>${level.positionSize}</td>
                     <td>${level.requiredMargin}</td>
@@ -758,9 +659,8 @@ class GridTradingCalculator {
             `;
         }).join('');
 
-        const gridLevelsTableBody = document.getElementById('gridLevelsTableBody');
-        if (gridLevelsTableBody) {
-            gridLevelsTableBody.innerHTML = tableContent;
+        if (this.gridLevelsTableBody) {
+            this.gridLevelsTableBody.innerHTML = tableContent;
         }
     }
 
@@ -823,6 +723,75 @@ class GridTradingCalculator {
         // Update the table
         this.updatePairsTable();
     }
+
+    showError(message) {
+        console.error(message);
+        if (this.statusDiv) {
+            this.statusDiv.style.display = 'block';
+            this.statusDiv.className = 'alert alert-danger mb-3';
+            this.statusDiv.textContent = message;
+        }
+    }
+
+    showSuccess(message) {
+        console.log(message);
+        if (this.statusDiv) {
+            this.statusDiv.style.display = 'block';
+            this.statusDiv.className = 'alert alert-success mb-3';
+            this.statusDiv.textContent = message;
+            setTimeout(() => {
+                this.statusDiv.style.display = 'none';
+            }, 3000);
+        }
+    }
+
+    showLoading(message = 'Loading...') {
+        console.log(message);
+        if (this.statusDiv) {
+            this.statusDiv.style.display = 'block';
+            this.statusDiv.className = 'alert alert-info mb-3';
+            this.statusDiv.innerHTML = `<div class="spinner-border spinner-border-sm me-2" role="status"></div>${message}`;
+        }
+    }
+
+    async fetchHistoricalData(symbol) {
+        const ranges = [];
+        const now = Date.now();
+        
+        for (let i = 1; i <= 5; i++) {
+            const startTime = now - (i * 24 * 60 * 60 * 1000);
+            const endTime = now - ((i-1) * 24 * 60 * 60 * 1000);
+            
+            try {
+                const response = await fetch(
+                    `${this.binanceEndpoint}/klines?symbol=${symbol}&interval=1d&startTime=${startTime}&endTime=${endTime}&limit=1`
+                );
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                if (data && data.length > 0) {
+                    const high = parseFloat(data[0][2]);
+                    const low = parseFloat(data[0][3]);
+                    const range = this.calculateDailyRange(high, low);
+                    ranges.push(range);
+                } else {
+                    ranges.push(0);
+                }
+                
+                // Add a small delay to avoid rate limits
+                await new Promise(resolve => setTimeout(resolve, 100));
+                
+            } catch (error) {
+                console.error(`Error fetching historical data for ${symbol}, day ${i}:`, error);
+                ranges.push(0);
+            }
+        }
+        
+        return ranges;
+    }
 }
 
 // Initialize calculator when DOM is ready
@@ -830,5 +799,4 @@ document.addEventListener('DOMContentLoaded', () => {
     console.log('DOM loaded, initializing calculator...');
     window.calculator = new GridTradingCalculator();
     window.calculator.init();
-    window.calculator.setDefaultValues();
 });

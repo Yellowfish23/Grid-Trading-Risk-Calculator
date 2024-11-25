@@ -5,7 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         .readonly-field {
-            background-color: #f8f9fa !important;
+            background-color: #e9ecef !important;
+            cursor: not-allowed;
+        }
+        .readonly-field:focus {
+            background-color: #e9ecef !important;
+            cursor: not-allowed;
         }
     </style>
     <title>Grid Trading Risk Calculator</title>
@@ -24,7 +29,8 @@
                         <div>
                             <span class="h5 mb-0">Top Pairs</span>
                             <select id="pairCount" class="form-select-sm ms-2 d-inline-block" style="width: auto;">
-                                <option value="10" selected>10 Pairs</option>
+                                <option value="3" selected>3 Pairs</option>
+                                <option value="10">10 Pairs</option>
                                 <option value="20">20 Pairs</option>
                                 <option value="30">30 Pairs</option>
                                 <option value="40">40 Pairs</option>
@@ -165,6 +171,13 @@
 
                                 <div class="row g-2 mt-2">
                                     <div class="col-md-3">
+                                        <label class="form-label form-label-sm">Leverage</label>
+                                        <div class="input-group input-group-sm">
+                                            <input type="number" class="form-control form-control-sm" id="leverage" value="3" step="0.1" min="1">
+                                            <span class="input-group-text">x</span>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
                                         <label class="form-label form-label-sm">Initial Trade Value</label>
                                         <input type="number" class="form-control form-control-sm" id="initialTradeValue" step="0.1" min="0" max="100000">
                                     </div>
@@ -179,20 +192,27 @@
                                         <label class="form-label form-label-sm">TP Value ($)</label>
                                         <input type="number" class="form-control form-control-sm" id="tpValue" step="0.1" min="0" max="100000">
                                     </div>
-                                    <div class="col-md-3">
-                                        <label class="form-label form-label-sm">$ Price move to TP</label>
-                                        <input type="number" class="form-control form-control-sm readonly-field" id="priceMoveToTP" readonly>
-                                    </div>
                                 </div>
 
                                 <div class="row g-2 mt-2">
                                     <div class="col-md-3">
-                                        <label class="form-label form-label-sm">Leverage</label>
+                                        <label class="form-label form-label-sm">$ Price move to TP</label>
+                                        <input type="number" class="form-control form-control-sm readonly-field" id="priceMoveToTP" readonly>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label form-label-sm">% Price move to TP</label>
                                         <div class="input-group input-group-sm">
-                                            <input type="number" class="form-control form-control-sm" id="leverage" value="3" step="0.1" min="1">
-                                            <span class="input-group-text">x</span>
+                                            <input type="number" class="form-control form-control-sm readonly-field" id="priceMoveToTPPercent" readonly>
+                                            <span class="input-group-text">%</span>
                                         </div>
                                     </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label form-label-sm">TP Price</label>
+                                        <input type="number" class="form-control form-control-sm readonly-field" id="tpPrice" readonly>
+                                    </div>
+                                </div>
+
+                                <div class="row g-2 mt-2">
                                     <div class="col-md-3">
                                         <label class="form-label form-label-sm">Grid Size %</label>
                                         <div class="input-group input-group-sm">
@@ -208,17 +228,13 @@
                                         <label class="form-label form-label-sm">Trade Size Multiplier</label>
                                         <input type="number" class="form-control form-control-sm" id="tradeSizeMultiplier" value="1.15" step="0.05" min="0.1">
                                     </div>
-                                </div>
-
-                                <div class="row g-2 mt-2">
                                     <div class="col-md-3">
                                         <label class="form-label form-label-sm">Grid Levels</label>
                                         <input type="number" class="form-control form-control-sm" id="gridLevels" value="3" step="1" min="1">
                                     </div>
-                                    <div class="col-md-3">
-                                        <label class="form-label form-label-sm">Take Profit Price</label>
-                                        <input type="number" class="form-control form-control-sm readonly-field" id="tpPrice" readonly>
-                                    </div>
+                                </div>
+
+                                <div class="row g-2 mt-2">
                                     <div class="col-md-3">
                                         <label class="form-label form-label-sm">Average Entry</label>
                                         <input type="number" class="form-control form-control-sm readonly-field" id="averageEntry" readonly>
@@ -227,10 +243,7 @@
                                         <label class="form-label form-label-sm">Margin Required</label>
                                         <input type="number" class="form-control form-control-sm readonly-field" id="marginRequired" readonly>
                                     </div>
-                                </div>
-
-                                <div class="row g-2 mt-2">
-                                    <div class="col-12">
+                                    <div class="col-md-6">
                                         <div class="alert alert-info mb-0 py-2" role="alert">
                                             <small>Click on any pair in the top pairs table to automatically populate trading settings.</small>
                                         </div>
@@ -246,27 +259,23 @@
                             <div class="card-header py-2">
                                 <h6 class="mb-0">Grid Analysis</h6>
                             </div>
-                            <div class="card-body">
-                                <div id="gridResults">
-                                    <div class="table-responsive">
-                                        <table class="table table-sm">
-                                            <thead>
-                                                <tr>
-                                                    <th>Level</th>
-                                                    <th>Price</th>
-                                                    <th>Grid Size</th>
-                                                    <th>Trade Size</th>
-                                                    <th>Position Size</th>
-                                                    <th>Required Margin</th>
-                                                    <th>% From Entry</th>
-                                                    <th>PnL at TP</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody id="gridLevelsTableBody">
-                                                <!-- Grid levels will be dynamically inserted here -->
-                                            </tbody>
-                                        </table>
-                                    </div>
+                            <div class="card-body py-2">
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-hover mb-0">
+                                        <thead>
+                                            <tr>
+                                                <th>Level</th>
+                                                <th>Price</th>
+                                                <th>Grid Size %</th>
+                                                <th>Trade Size</th>
+                                                <th>Position Size</th>
+                                                <th>Required Margin</th>
+                                                <th>% From Entry</th>
+                                                <th>PnL at TP</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="gridLevelsTableBody"></tbody>
+                                    </table>
                                 </div>
                             </div>
                         </div>
