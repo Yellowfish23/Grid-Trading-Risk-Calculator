@@ -43,6 +43,7 @@ class GridTradingCalculator {
         this.tpPriceInput = null;
         this.averageEntryInput = null;
         this.gridLevelsTableBody = null;
+        this.tokenAmountInput = null;
 
         // Removed totalPnlAtTpInput
     }
@@ -74,6 +75,7 @@ class GridTradingCalculator {
         this.tpPriceInput = document.getElementById('tpPrice');
         this.averageEntryInput = document.getElementById('averageEntry');
         this.gridLevelsTableBody = document.getElementById('gridLevelsTableBody');
+        this.tokenAmountInput = document.getElementById('tokenAmount');
 
         // Removed totalPnlAtTpInput
 
@@ -102,7 +104,8 @@ class GridTradingCalculator {
             'tradeSizeMultiplier': this.tradeSizeMultiplierInput,
             'tpPrice': this.tpPriceInput,
             'averageEntry': this.averageEntryInput,
-            'gridLevelsTableBody': this.gridLevelsTableBody
+            'gridLevelsTableBody': this.gridLevelsTableBody,
+            'tokenAmount': this.tokenAmountInput
         };
 
         // Removed totalPnlAtTpInput
@@ -155,6 +158,19 @@ class GridTradingCalculator {
                     if (this.updateInterval) {
                         clearInterval(this.updateInterval);
                         this.updateInterval = null;
+                    }
+                }
+            });
+        }
+
+        // Add click handler to pairs table
+        if (this.pairsTableBody) {
+            this.pairsTableBody.addEventListener('click', (e) => {
+                const row = e.target.closest('tr');
+                if (row) {
+                    const pair = this.pairs.find(p => p.symbol === row.cells[0].textContent);
+                    if (pair) {
+                        this.selectTradingPair(pair.symbol, pair.lastPrice);
                     }
                 }
             });
@@ -371,7 +387,7 @@ class GridTradingCalculator {
             }
 
             return `
-                <tr class="${pair.priceChange >= 0 ? 'table-success' : 'table-danger'}">
+                <tr class="${pair.priceChange >= 0 ? 'table-success' : 'table-danger'}" onclick="calculator.selectTradingPair('${pair.symbol}', ${pair.lastPrice})" style="cursor: pointer;">
                     <td>${pair.symbol}</td>
                     <td>${this.formatPrice(pair.lastPrice)}</td>
                     <td>${pair.priceChange.toFixed(2)}%</td>
@@ -531,16 +547,30 @@ class GridTradingCalculator {
             });
             
             // Calculate take profit values
-            const tpPrice = entryPrice * (1 + (tpPercent / 100));
+            const tpPrice = entryPrice * (1 + ((tpPercent / 100) / leverage));
+            if (this.tpPriceInput) {
+                this.tpPriceInput.value = formatMatchingDecimals(tpPrice);
+            }
+
+            // Calculate price move to TP in dollars (with leverage properly accounted for)
             const priceMoveToTP = tpPrice - entryPrice;
+            if (this.priceMoveToTPInput) {
+                this.priceMoveToTPInput.value = formatMatchingDecimals(priceMoveToTP);
+            }
+
+            // Calculate price move to TP as percentage (with leverage properly accounted for)
             const priceMoveToTPPercent = ((tpPrice - entryPrice) / entryPrice) * 100;
-            
+            if (this.priceMoveToTPPercentInput) {
+                this.priceMoveToTPPercentInput.value = priceMoveToTPPercent.toFixed(2);
+            }
+
             // Calculate TP value based on whether it was manually set
             let tpValue;
             if (document.activeElement === this.tpValueInput) {
                 tpValue = manualTpValue;
             } else {
-                tpValue = (initialTradeValue * leverage * tpPercent) / 100;
+                // TP Value is the profit (percentage of initial trade value with leverage)
+                tpValue = initialTradeValue * (tpPercent / 100) * leverage;
                 this.tpValueInput.value = formatMatchingDecimals(tpValue);
             }
 
@@ -616,15 +646,6 @@ class GridTradingCalculator {
             });
 
             // Update the UI with calculated values
-            if (this.tpPriceInput) {
-                this.tpPriceInput.value = formatMatchingDecimals(tpPrice);
-            }
-            if (this.priceMoveToTPInput) {
-                this.priceMoveToTPInput.value = formatMatchingDecimals(priceMoveToTP);
-            }
-            if (this.priceMoveToTPPercentInput) {
-                this.priceMoveToTPPercentInput.value = priceMoveToTPPercent.toFixed(2);
-            }
             if (this.marginRequiredInput) {
                 this.marginRequiredInput.value = formatMatchingDecimals(requiredMargin);
             }
@@ -632,8 +653,49 @@ class GridTradingCalculator {
                 this.averageEntryInput.value = formatMatchingDecimals(averageEntryPrice);
             }
 
+            // Calculate number of tokens for initial trade (without leverage)
+            const tokenAmount = initialTradeValue / entryPrice;
+            if (this.tokenAmountInput) {
+                this.tokenAmountInput.value = formatMatchingDecimals(tokenAmount);
+            }
+
             // Update grid levels table
             this.updateGridLevelsTable(gridLevelsData);
+
+            // Calculate risk metrics
+            const liquidationPrice = entryPrice * (1 - (1 / leverage));
+            const maxDrawdown = ((currentPrice - entryPrice) / entryPrice) * 100;
+            const maxProfit = ((tpPrice - averageEntryPrice) / averageEntryPrice) * 100;
+            const riskRewardRatio = Math.abs(maxProfit / maxDrawdown);
+            const marginUtilization = (requiredMargin / margin) * 100;
+            const liquidationDistance = ((entryPrice - liquidationPrice) / entryPrice) * 100;
+
+            // Update risk metrics UI
+            document.getElementById('totalInvestment').textContent = formatMatchingDecimals(totalTradeSize);
+            document.getElementById('marginRequired').textContent = formatMatchingDecimals(requiredMargin);
+            document.getElementById('averageEntry').textContent = formatMatchingDecimals(averageEntryPrice);
+            document.getElementById('liquidationPrice').textContent = formatMatchingDecimals(liquidationPrice);
+            document.getElementById('maxDrawdown').textContent = maxDrawdown.toFixed(2) + '%';
+            document.getElementById('maxProfit').textContent = maxProfit.toFixed(2) + '%';
+            document.getElementById('riskRewardRatio').textContent = riskRewardRatio.toFixed(2);
+            document.getElementById('marginUtilization').textContent = marginUtilization.toFixed(2) + '%';
+            document.getElementById('liquidationDistance').textContent = liquidationDistance.toFixed(2) + '%';
+
+            // Apply warning classes
+            const marginUtilSpan = document.getElementById('marginUtilization');
+            marginUtilSpan.className = 'fw-bold ' + 
+                (marginUtilization > 80 ? 'text-danger' : 
+                 marginUtilization > 50 ? 'text-warning' : 'text-success');
+
+            const riskRewardSpan = document.getElementById('riskRewardRatio');
+            riskRewardSpan.className = 'fw-bold ' + 
+                (riskRewardRatio < 1.0 ? 'text-danger' : 
+                 riskRewardRatio < 1.5 ? 'text-warning' : 'text-success');
+
+            const liquidationDistSpan = document.getElementById('liquidationDistance');
+            liquidationDistSpan.className = 'fw-bold ' + 
+                (liquidationDistance < 10 ? 'text-danger' : 
+                 liquidationDistance < 20 ? 'text-warning' : 'text-success');
 
         } catch (error) {
             console.error('Error calculating grid:', error);
