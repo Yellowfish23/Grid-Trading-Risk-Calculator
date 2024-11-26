@@ -167,9 +167,17 @@
                                             <span class="input-group-text">%</span>
                                         </div>
                                     </div>
+                                    <div class="col">
+                                        <label class="form-label form-label-sm">Initial Trade Value</label>
+                                        <input type="number" class="form-control form-control-sm" id="initialTradeValue" step="0.1" min="0" max="100000">
+                                    </div>
                                 </div>
 
                                 <div class="row g-2 mt-2">
+                                    <div class="col-md-3">
+                                        <label class="form-label form-label-sm">Number of Tokens</label>
+                                        <input type="text" class="form-control form-control-sm readonly-field" id="tokenAmount" readonly>
+                                    </div>
                                     <div class="col-md-3">
                                         <label class="form-label form-label-sm">Leverage</label>
                                         <div class="input-group input-group-sm">
@@ -178,11 +186,7 @@
                                         </div>
                                     </div>
                                     <div class="col-md-3">
-                                        <label class="form-label form-label-sm">Initial Trade Value</label>
-                                        <input type="number" class="form-control form-control-sm" id="initialTradeValue" step="0.1" min="0" max="100000">
-                                    </div>
-                                    <div class="col-md-3">
-                                        <label class="form-label form-label-sm">TP %</label>
+                                        <label class="form-label form-label-sm">TP% of Initial Trade Value</label>
                                         <div class="input-group input-group-sm">
                                             <input type="number" class="form-control form-control-sm" id="tpPercent" value="10" step="0.1" min="0">
                                             <span class="input-group-text">%</span>
@@ -235,14 +239,6 @@
                                 </div>
 
                                 <div class="row g-2 mt-2">
-                                    <div class="col-md-3">
-                                        <label class="form-label form-label-sm">Average Entry</label>
-                                        <input type="number" class="form-control form-control-sm readonly-field" id="averageEntry" readonly>
-                                    </div>
-                                    <div class="col-md-3">
-                                        <label class="form-label form-label-sm">Margin Required</label>
-                                        <input type="number" class="form-control form-control-sm readonly-field" id="marginRequired" readonly>
-                                    </div>
                                     <div class="col-md-6">
                                         <div class="alert alert-info mb-0 py-2" role="alert">
                                             <small>Click on any pair in the top pairs table to automatically populate trading settings.</small>
@@ -287,60 +283,43 @@
                             <div class="card-header py-2">
                                 <h6 class="mb-0">Risk Analysis</h6>
                             </div>
-                            <div class="card-body">
-                                <div class="row">
-                                    <div class="col-md-6">
-                                        <div class="mb-2">
-                                            <label class="form-label form-label-sm">Maximum Drawdown</label>
-                                            <div id="maxDrawdown" class="form-control form-control-sm">-</div>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <div class="mb-2">
-                                            <label class="form-label form-label-sm">Risk/Reward Ratio</label>
-                                            <div id="riskReward" class="form-control form-control-sm">-</div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Risk Metrics Card -->
-                    <div class="col-12">
-                        <div class="card">
                             <div class="card-body py-2">
                                 <div class="row g-2">
                                     <div class="col-md-3">
-                                        <small>Total Investment: <span id="totalInvestment" class="fw-bold">-</span> USDT</small>
+                                        <label class="form-label form-label-sm">Total Investment</label>
+                                        <div id="totalInvestment" class="fw-bold">0.00</div>
                                     </div>
                                     <div class="col-md-3">
-                                        <small>Margin Required: <span id="marginRequired" class="fw-bold">-</span> USDT</small>
+                                        <label class="form-label form-label-sm">Margin Required</label>
+                                        <div id="marginRequired" class="fw-bold">0.00</div>
                                     </div>
                                     <div class="col-md-3">
-                                        <small>Average Entry: <span id="averageEntry" class="fw-bold">-</span></small>
+                                        <label class="form-label form-label-sm">Average Entry</label>
+                                        <div id="averageEntry" class="fw-bold">0.00</div>
                                     </div>
                                     <div class="col-md-3">
-                                        <small>Liquidation Price: <span id="liquidationPrice" class="fw-bold">-</span></small>
-                                    </div>
-                                </div>
-                                <div class="row g-2 mt-2">
-                                    <div class="col-md-3">
-                                        <small>Max Drawdown: <span id="maxDrawdown" class="fw-bold">-</span></small>
+                                        <label class="form-label form-label-sm">Liquidation Price</label>
+                                        <div id="liquidationPrice" class="fw-bold">0.00</div>
                                     </div>
                                     <div class="col-md-3">
-                                        <small>Max Profit: <span id="maxProfit" class="fw-bold">-</span></small>
+                                        <label class="form-label form-label-sm">Max Drawdown</label>
+                                        <div id="maxDrawdown" class="fw-bold">0.00%</div>
                                     </div>
                                     <div class="col-md-3">
-                                        <small>Risk/Reward: <span id="riskRewardRatio" class="fw-bold">-</span></small>
+                                        <label class="form-label form-label-sm">Max Profit</label>
+                                        <div id="maxProfit" class="fw-bold">0.00%</div>
                                     </div>
                                     <div class="col-md-3">
-                                        <small>Margin Usage: <span id="marginUtilization" class="fw-bold">-</span></small>
+                                        <label class="form-label form-label-sm">Risk/Reward Ratio</label>
+                                        <div id="riskRewardRatio" class="fw-bold">0.00</div>
                                     </div>
-                                </div>
-                                <div class="row g-2 mt-2">
-                                    <div class="col-md-12">
-                                        <small>Liquidation Distance: <span id="liquidationDistance" class="fw-bold">-</span></small>
+                                    <div class="col-md-3">
+                                        <label class="form-label form-label-sm">Margin Usage</label>
+                                        <div id="marginUtilization" class="fw-bold">0.00%</div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label form-label-sm">Liquidation Distance</label>
+                                        <div id="liquidationDistance" class="fw-bold">0.00%</div>
                                     </div>
                                 </div>
                             </div>
